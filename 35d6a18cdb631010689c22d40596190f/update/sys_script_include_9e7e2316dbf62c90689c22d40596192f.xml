@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.RTSMInternalUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>RTSM internal utilities</description>
+        <name>RTSMInternalUtil</name>
+        <script><![CDATA[/**SNDOC
+		@name RTSMInternalUtil
+		@description Constants
+		@domain Utilities
+		@author andreas.reermann@atos.net
+		@version 1.0.0
+	*/
+var RTSMInternalUtil = Class.create();
+RTSMInternalUtil.prototype = {
+    initialize: function () {},
+    type: 'RTSMInternalUtil'
+};
+
+RTSMInternalUtil.getRTSMScopeID = function () {
+    var grApp = new GlideRecord('sys_scope');
+    grApp.get('scope', 'x_atpu_rtsm');
+    return grApp.sys_id;
+};
+
+//u_cmdb_qb_result_773246737b948dedb9a8298ba4e8becd99a1ec67
+RTSMInternalUtil.setCrossScope = function (tableName, fullTableAccess) {
+	var rtsmSysId = RTSMInternalUtil.getRTSMScopeID;
+	var grCS = new GlideRecord('sys_scope_privilege');
+	grCS.query('source_scope', rtsmSysId);
+	grCS.query('target_scope', 'global');
+	grCS.query('target_name', tableName);
+	grCS.query();
+	if (grCS.getRowCount() == 0) {	
+		var grCS1 = new GlideRecord('sys_scope_privilege');
+		grCS1.initialize();
+		grCS1.setValue('sys_scope', rtsmSysId);		
+		grCS1.setValue('source_scope', rtsmSysId);
+		grCS1.setValue('target_scope', 'global');
+		grCS1.setValue('target_name', tableName);
+		grCS1.setValue('status', 'allowed');
+		grCS1.setValue('target_type', 'sys_db_object');	
+		grCS1.setValue('operation', 'read');		
+		grCS1.insert();	
+		if (fullTableAccess) {
+			grCS1.setValue('operation', 'create');		
+			grCS1.insert();
+			grCS1.setValue('operation', 'write');		
+			grCS1.insert();		
+			grCS1.setValue('operation', 'delete');		
+			grCS1.insert();	
+		}	
+	}
+};
+
+	/**SNDOC
+	@name isDevInstance
+	@description returns true if instance if is Dev instance ven01503
+	@returns 
+	*/
+	RTSMInternalUtil.isDevInstance = function () {
+		switch (gs.getProperty('instance_name')) {
+			case 'ven01503':
+				return true;
+			default:
+				return false;
+		}
+	};
+
+	RTSMInternalUtil.isNonDevInstance = function () {
+		return !RTSMInternalUtil.isDevInstance();
+	};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-03-12 13:21:40</sys_created_on>
+        <sys_id>9e7e2316dbf62c90689c22d40596192f</sys_id>
+        <sys_mod_count>4</sys_mod_count>
+        <sys_name>RTSMInternalUtil</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_9e7e2316dbf62c90689c22d40596192f</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:31:54</sys_updated_on>
+    </sys_script_include>
+</record_update>

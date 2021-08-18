@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="" label="Rtsm Type 40bdf129db706090689c22d4059619b3 15d8cee9dbb06090689c22d4059619" language="en" table="x_atpu_rtsm_type_40bdf129db706090689c22d4059619b3_15d8cee9dbb06090689c22d4059619">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element/>
+            <help/>
+            <hint/>
+            <label>Rtsm Type 40bdf129db706090689c22d4059619b3 15d8cee9dbb06090689c22d4059619</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_type_40bdf129db706090689c22d4059619b3_15d8cee9dbb06090689c22d4059619</name>
+            <plural>Rtsm Type 40bdf129db706090689c22d4059619b3 15d8cee9dbb06090689c22d4059619s</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:30:01</sys_created_on>
+            <sys_id>19c2d5e91b427010e5f386a3604bcba2</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Rtsm Type 40bdf129db706090689c22d4059619b3 15d8cee9dbb06090689c22d4059619</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_type_40bdf129db706090689c22d4059619b3_15d8cee9dbb06090689c22d4059619__en</sys_update_name>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:30:01</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SerializerCITreeSPImportCustomersInfo</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for the serialization and deserialization of the SerializerCITreeSPImportCustomersInfo class. It extends from the general Serializer class to gain common functionality.</description>
+        <name>SerializerCITreeSPImportCustomersInfo</name>
+        <script><![CDATA[/**SNDOC
+	@name SerializerCITreeSPImportCustomersInfo
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var SerializerCITreeSPImportCustomersInfo = Class.create();
+SerializerCITreeSPImportCustomersInfo.prototype = Object.extendsObject(Serializer, {
+	/**SNDOC
+		@name initialize
+		@description 
+		@param {String} [queueType] -  
+		@param {String} [dataType] -  
+		@param {String} [customerSysId] -  
+		*/
+	initialize: function (queueType, dataType, customerSysId) {
+		Serializer.prototype.initialize.call(this, queueType, dataType, customerSysId);
+
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SerializerCITreeSPImportCustomersInfo");	
+		this.log.info(' fIRST Queue Type - ' + this.queueType + ", data type - " + this.dataType + ", customer - " + this.customerSysId);
+	},
+	/**SNDOC
+		@name serialize
+		@description 
+		@param {CITreeSPImportCustomersInfo} [ciImportCustomerInfo] - 
+		@returns {Boolean} true if success
+		*/
+	serialize: function (ciImportCustomerInfo) {
+
+		var qd = new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer);
+
+		//Deleting Old data here
+		this.deleteOldData();
+
+		//Claening the serialisation
+		ciImportCustomerInfo.cleanForSerialization();
+
+		//JSON Stringifying the Data here
+		var paramObject = JSON.stringify(ciImportCustomerInfo);
+
+		//Inserting Data in queue here
+		var insertData = qd.insertData(paramObject);
+
+		//Chekcks if data is serialised
+		if (insertData != null) {
+			this.log.info('serialize : Serialisation was success : Queue Type - ' + this.queueType + ", data type - " + this.dataType + ", customer - " + this.customer);
+			return true;
+		} else {
+			this.error = 'Serialisation was not successfull : Queue Type - ' + this.queueType + ", data type - " + this.dataType + ", customer - " + this.customer;
+			this.log.error('serialize : Error occured. ' + this.error);
+			return false;
+		}
+
+	},
+	/**SNDOC
+		@name deserialize
+		@description
+		@returns the deserialized data or Null
+		*/
+	deserialize: function () {
+		this.log.info("[deserialize SerializerCITreeSPImportCustomersInfo] Start");
+		this.log.info(' Queue Type - ' + this.queueType + ", data type - " + this.dataType + ", customer - " + this.customerSysId);
+		var queueData = new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customerSysId);
+		var data = queueData.getData();
+
+		//Checks whether data is parsed or not
+		if (data != null) {
+
+			var parsedData = JSON.parse(data.data, this._revive);
+			this.log.info('deserialize : de-serialisation was success : Queue Type - ' + this.queueType + ", data type - " + this.dataType + ", customer - " + this.customer + ", Parsed Data - " + parsedData);
+			return parsedData;
+		} else {
+			this.error = 'De-serialisation was not successfull : Queue Type - ' + this.queueType + ", data type - " + this.dataType + ", customer - " + this.customer;
+			this.log.error('deserialize : Error occured. ' + this.error);
+			return null;
+		}
+	},
+	/**SNDOC
+		@name _revive
+		@description revive a CITreeSPImportCustomersInfo object
+		@param {*} [key] -  
+		@param {*} [val] -  
+		@returns {CITreeSPImportCustomersInfo|any} any if val.__type !== 'CITreeSPImportCustomersInfo' else CITreeSPImportCustomersInfo
+		*/
+	_revive: function (key, val) {
+
+		var log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SerializerCITreeSPImportCustomersInfo");	
+
+		log.info('_revive: Entered Revive function , val type is: ' + typeof (val) + ', val is: ' + val);
+
+		if (typeof (val) === 'object' && val.__type === 'CITreeSPImportCustomersInfo') {
+
+			log.info(' _revive : Entering the IF condition ');
+			log.info("deserializer CITreeSPImportCustomersInfo key: [" + key + "] val: [" + val + "] ser: " + JSON.stringify(val));
+
+			var tempImportCustInfo = new CITreeSPImportCustomersInfo();
+			tempImportCustInfo.initFromImportCustomersInfo(val);
+			return tempImportCustInfo;
+
+		} else {
+			log.info('_revive : de-serializer key : ' + key + ' val is : ' + val);
+			return val;
+		}
+	},
+
+	type: 'SerializerCITreeSPImportCustomersInfo'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>2a58b177db7237c424d2bb1a68961938</sys_id>
+        <sys_mod_count>28</sys_mod_count>
+        <sys_name>SerializerCITreeSPImportCustomersInfo</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_2a58b177db7237c424d2bb1a68961938</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-19 13:51:31</sys_updated_on>
+    </sys_script_include>
+</record_update>

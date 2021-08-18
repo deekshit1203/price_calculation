@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="Processing Queue Data" max_length="40" name="x_atpu_rtsm_citreesp_queue_data" type="collection">
+        <element attributes="edge_encryption_enabled=true" label="Chunk ID" mandatory="true" max_length="40" name="chunk_id" type="integer"/>
+        <element attributes="edge_encryption_enabled=true" label="Customer" max_length="32" name="customer" reference="core_company" type="reference"/>
+        <element label="Data" mandatory="true" max_length="3355443" name="data" type="string"/>
+        <element label="Data Type" mandatory="true" max_length="40" name="data_type" reference_qual="javascript: new ServiceEvent_CIRelationManager();" type="string" use_reference_qualifier="advanced"/>
+        <element attributes="edge_encryption_enabled=true" choice="1" label="Queue Type" mandatory="true" max_length="40" name="queue_type" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="cmdbImportCustomers" sequence="10" value="cmdbImportCustomers"/>
+                <element inactive_on_update="false" label="cmdbFilterCustomer" sequence="20" value="cmdbFilterCustomer"/>
+                <element inactive_on_update="false" label="cmdbChangeDetectionCustomer" sequence="30" value="cmdbChangeDetectionCustomer"/>
+                <element inactive_on_update="false" label="connectCIs" sequence="40" value="connectCIs"/>
+                <element inactive_on_update="false" label="disconnectCIs" sequence="50" value="disconnectCIs"/>
+                <element inactive_on_update="false" label="updateCIRelation" sequence="60" value="updateCIRelation"/>
+                <element inactive_on_update="false" label="recalcCI" sequence="80" value="recalcCI"/>
+            </choice>
+        </element>
+        <index name="index">
+            <element name="customer"/>
+        </index>
+    </element>
+</database>

@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_choice action="INSERT_OR_UPDATE" field="queue_type" table="x_atpu_rtsm_citreesp_queue_data" version="3">
+        <sys_choice_set action="INSERT_OR_UPDATE">
+            <element>queue_type</element>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sys_class_name>sys_choice_set</sys_class_name>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_id>798259a91b427010e5f386a3604bcbef</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>queue_type</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_choice_x_atpu_rtsm_citreesp_queue_data_queue_type</sys_update_name>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+        </sys_choice_set>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>cmdbImportCustomers</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>10</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>b98259a91b427010e5f386a3604bcbed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>cmdbImportCustomers</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>cmdbFilterCustomer</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>20</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>f98259a91b427010e5f386a3604bcbed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>cmdbFilterCustomer</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>cmdbChangeDetectionCustomer</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>30</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>3d8259a91b427010e5f386a3604bcbed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>cmdbChangeDetectionCustomer</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>connectCIs</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>40</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>7d8259a91b427010e5f386a3604bcbed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>connectCIs</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>disconnectCIs</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>50</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>bd8259a91b427010e5f386a3604bcbed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>disconnectCIs</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>updateCIRelation</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>60</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>fd8259a91b427010e5f386a3604bcbed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>updateCIRelation</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>queue_type</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>recalcCI</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_queue_data</name>
+            <sequence>80</sequence>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:56</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>318259a91b427010e5f386a3604bcbee</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:56</sys_updated_on>
+            <value>recalcCI</value>
+        </sys_choice>
+    </sys_choice>
+</record_update>

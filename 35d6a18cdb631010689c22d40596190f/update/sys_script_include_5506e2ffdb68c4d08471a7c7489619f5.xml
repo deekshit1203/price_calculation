@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessingQueue</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Processor base class</description>
+        <name>CITreeSPProcessingQueue</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessingQueue
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessingQueue = Class.create();
+
+CITreeSPProcessingQueue.prototype = {
+
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_DM_PROC_QUEUE_MGR, "CITreeSPProcessingQueue");
+		this.ops = RTSMConst.QO;
+		this.qState = RTSMConst.QueueState;	
+
+		// Last Entry of type "cmdbImportCustomers" from CI Tree SP Queue
+		this.grQueueEntry = null;
+	},
+
+	/**SNDOC
+		@name isLastEntryProcessed
+		@description Checks if there is at least one entry available in the citreesp_queue for (entryType, customer)
+		@author ATF2
+		@param  {String} [entryType] - type of the queue entry
+		@param  {String} [custSysId] - sys_id of customer
+		@returns {Boolean} true -> all entries processed 
+		*/
+	isLastEntryProcessed: function (entryType, custSysId) {
+		this.log.info('[isLastEntryProcessed]: Queue type - ' + entryType);
+
+		var grQueue = new GlideRecord('x_atpu_rtsm_citreesp_queue');
+		grQueue.addQuery('type', entryType);
+
+		if (custSysId != null) {
+			grQueue.addQuery('customer', custSysId);
+		}
+
+		grQueue.orderByDesc('sys_created_on');
+		grQueue.setLimit(1);
+		grQueue.query();
+		this.log.debug('[isLastEntryProcessed] [grQueue]= ' + RTSMLog.logQuery(grQueue));
+
+		if (grQueue.next()) {
+			this.log.info('[isLastEntryProcessed]: Next Record available : Type ' + grQueue.type + ' Created on - ' + grQueue.sys_created_on);
+			if (grQueue.state == this.qState.PROCESSED) {
+				this.log.info('[isLastEntryProcessed]: Queue state is Processed');
+				return true;
+			}
+			return false;
+		}
+		return true;
+	},
+
+	/**SNDOC
+		@name getLastEntry
+		@description 
+		@author ATF2
+		@param  {String} [entryType] - type of the queue entry. If type == 'number' queue is queried w/o queuedata, else with queuedata
+		@param  {String} [custSysId] - sys_id of customer
+		@param  {GlideDateTime} [dateTimeObj] - GlideDateTime before which the entries in scope must have been created, optional
+		@param  {String} [Operator] - if null query sys_created_on '<' dateTimeObj else query '>'
+		@param  {String} [queueData] - queueData of 
+		@returns {GlideRecord(citreesp_queue)},  null->Error occured, e.g. element does not exist on queue, !=null->GlideRecord of Queue Entry
+		*/
+	getLastEntry: function (entryType, custSysId, dateTimeObj, Operator, queueData) {
+		this.log.debug("[getLastEntry] Start");
+
+		this.log.debug("[getLastEntry] queueData " + queueData);
+		var citreespQueueGR = new GlideRecord('x_atpu_rtsm_citreesp_queue');
+
+		if (custSysId != null) {
+			citreespQueueGR.addQuery('customer.sys_id', custSysId);
+		}
+
+		if (dateTimeObj) {
+
+			if (Operator == null) {
+				// Param4 omitted
+				citreespQueueGR.addQuery('sys_created_on', '<', dateTimeObj);
+			} else {
+				citreespQueueGR.addQuery('sys_created_on', '>', dateTimeObj);
+			}
+		}
+
+		if (typeof entryType == 'number') {
+
+			citreespQueueGR.addQuery('type', entryType);
+			citreespQueueGR.orderByDesc('sys_created_on');
+			citreespQueueGR.setLimit(1);
+			citreespQueueGR.query();
+			this.log.debug('[getLastEntry] == number ' + RTSMLog.logQuery(citreespQueueGR));			
+
+		} else {
+			citreespQueueGR.addQuery('type', this.ops[entryType]);
+			citreespQueueGR.orderByDesc('sys_created_on');
+			if (queueData) {
+				citreespQueueGR.addQuery('queue_data', queueData);
+			}
+			citreespQueueGR.setLimit(1);
+			citreespQueueGR.query();
+			this.log.debug('[getLastEntry] != number ' + RTSMLog.logQuery(citreespQueueGR));			
+		}
+		if (citreespQueueGR.next()) {
+			this.log.debug("[getLastEntry]: Last entry from CI Tree SP Queue=" + citreespQueueGR.sys_id.toString());
+
+			this.log.debug("[getLastEntry] End");
+			return citreespQueueGR;
+		}
+
+		this.log.debug("[getLastEntry]: No entry found in CI Tree SP Queue");
+		this.log.debug("[getLastEntry] End");
+		return null;
+	},
+
+	/**SNDOC
+		@name getUnprocessedEntryCount
+		@description 
+		@author ATF2
+		@param  {Array} [entriesArray] - Array of String holding all the Types of entries in scope. Can be this.ops as strings or as numbers, but not mixed.
+		@param  {GlideDateTime} [dateTimeObj] - GlideDateTime at or after which the entries in scope must have been created
+		@param  {String} [custSysId] - sys_id of Customer record to restrict the query on. Optional.
+		@returns {Integer}, number >=0 of queue entries in an unprocessed state
+		*/
+	getUnprocessedEntryCount: function (entriesArray, dateTimeObj, custSysId) {
+		this.log.trace("[getUnprocessedEntryCount] Start");
+		var unprocessedEntryCount = 0;
+		var tempArr = [];
+
+		var citreespQueueGR = new GlideAggregate('x_atpu_rtsm_citreesp_queue');
+
+		if (custSysId != null) {
+			citreespQueueGR.addQuery('customer', custSysId);
+		}
+
+		for (var i = 0; i < entriesArray.length; i++) {
+			if (typeof entriesArray[i] == 'string') {
+				var entryType = this.ops[entriesArray[i]];
+				tempArr.push(entryType);
+			}
+		}
+
+		if (tempArr.length > 0) {
+			citreespQueueGR.addQuery('type', 'IN', tempArr);
+		} else {
+			citreespQueueGR.addQuery('type', 'IN', entriesArray);
+		}
+
+		if (dateTimeObj != null) {
+			citreespQueueGR.addQuery('sys_created_on', '>=', dateTimeObj);
+		}
+
+		citreespQueueGR.addQuery('state', '!=', this.qState.PROCESSED);
+		citreespQueueGR.addAggregate('COUNT');
+		citreespQueueGR.query();
+
+		if (citreespQueueGR.next()) {
+			unprocessedEntryCount = citreespQueueGR.getAggregate('COUNT');
+			this.log.trace("[getUnprocessedEntryCount]: unprocessedEntryCount= " + unprocessedEntryCount);
+		}
+
+		this.log.trace("[getUnprocessedEntryCount] End");
+		return unprocessedEntryCount;
+	},
+
+	/**
+	 *
+	 * @param {Array}, 
+	 * @param {GlideDateTime}, GlideDateTime at or after which the entries in scope must have been created
+	 * @param {String}, sys_id of Customer record to restrict the query on. Can be omitted, then all Customers are in scope
+	 *
+	 * @returns {Integer}, number >=0 of queue entries 
+	 */
+
+	//TODO: check if entriesArray is really string, I guess it has to be Array<Number>()
+	/**SNDOC
+		@name getEntryCount
+		@description 
+		@author ATF2
+		@param  {Array} [entriesArray] - Array of String holding all the Types of entries in scope
+		@param  {GlideDateTime} [dateTimeObj] - GlideDateTime at or after which the entries in scope must have been created
+		@param  {String} [custSysId] - sys_id of Customer record to restrict the query on. Can be omitted, then all Customers are in scope.
+		 @returns {Integer}, number >=0 of queue entries 
+		*/
+	getEntryCount: function (entriesArray, dateTimeObj, custSysId) {
+		this.log.trace("[getEntryCount] Start");
+		var entryCount = 0;
+
+		var citreespQueueGR = new GlideRecord('x_atpu_rtsm_citreesp_queue');
+
+		if (custSysId != null) {
+			citreespQueueGR.addQuery('customer', custSysId);
+		}
+		citreespQueueGR.addQuery('type', 'IN', entriesArray);
+		citreespQueueGR.addQuery('sys_created_on', '>=', dateTimeObj);
+		citreespQueueGR.orderBy('sys_created_on'); // get the records in ASC
+		citreespQueueGR.query();
+		this.log.trace('[getEntryCount] [citreespQueueGR]= ' + RTSMLog.logQuery(citreespQueueGR));
+
+		while (citreespQueueGR.next()) {
+
+			this.log.trace("[getEntryCount]: sys_created_on= " + citreespQueueGR.getValue("sys_created_on"));
+
+			if (citreespQueueGR.type == this.ops.enableCustomerRTSM || citreespQueueGR.type == this.ops.disableCustomerRTSM) {
+
+				break;
+			} else {
+				entryCount++;
+				this.log.trace("[getEntryCount]: entryCount=" + entryCount);
+			}
+		}
+
+		this.log.trace("[getEntryCount]: entryCount= " + entryCount);
+		this.log.trace("[getEntryCount] End");
+		return entryCount;
+	},
+
+	/**SNDOC
+		@name getFieldOfLastEntry
+		@description 
+		@author ATF2
+		@param  {String} [entryType] - Type of entry
+		@param  {String} [fieldName] - Name of field to retrieve the value for, this equals to the database column names
+		@param  {String} [custSysId] - sys_id of Customer record to restrict the query on
+		@param  {GlideDateTime} [dateTimeObj] - GlideDateTime before which the entries in scope must have been created
+		@returns {GlideElement}, null->Error occured, e.g. element does not exist on queue, !=null->GlideElement of the requested column
+		*/
+	getFieldOfLastEntry: function (entryType, fieldName, custSysId, dateTimeObj) {
+		this.log.debug("[getFieldOfLastEntry] Start");
+		this.log.debug("[getFieldOfLastEntry] entryType: " + entryType);
+		this.log.debug("[getFieldOfLastEntry] fieldName: " + fieldName);
+		this.log.debug("[getFieldOfLastEntry] custSysId: " + custSysId);
+		this.log.debug("[getFieldOfLastEntry] dateTimeObj: " + dateTimeObj);
+
+		var grQueueEntry = this.getLastEntry(entryType, custSysId, dateTimeObj);
+		if (grQueueEntry) {
+
+			//Get GlideElement of requested column(Param2)
+			var glideElementObj = grQueueEntry.getElement(fieldName);
+			if (glideElementObj) {
+				this.log.debug("[getFieldOfLastEntry] End glideElementObj");
+				return glideElementObj;
+			}
+		}
+		this.log.debug("[getFieldOfLastEntry] End null");
+		return null;
+	},
+
+	/**SNDOC
+		@name loadEntryByQueueData
+		@description 
+		@author ATF2
+		@param  {String} [] - 
+		@param  {String} [entryType] - Type of entry
+		@param  {CIRelation} [ciRelobj] - CIRelation Object
+		@param  {GlideDateTime} [dateTimeObj] - GlideDateTime before which the entries in scope must have been created
+		@returns {GlideRecord(citreesp_queue)} null->queue element not found on the queue, e.g. element does not exist on queue, !=null->queue entry that was searched
+		*/
+	loadEntryByQueueData: function (entryType, ciRelobj, dateTimeObj) {
+
+		this.log.info("[loadEntryByQueueData] Start");
+		var queueElement;
+		var factory = new SerializerFactory();
+		var dataType = ciRelobj.getObjectType();
+
+		// Not in scoped context
+		//gs.sleep(20000);
+		global.RTSMGlobalScopeUtils.sleep(20000);
+
+		//Create a Serializer object using the SerializerFactory
+		var serializerObject = factory.createSerializer(entryType, dataType, ciRelobj.child.company);
+
+		if (serializerObject === null) {
+			this.error = "Unable to create serializer to load entry of type " + entryType + " from  queue";
+			this.setError(this.error);
+		} else {
+			var ciRelToSerialize = new SerializerCIRelation();
+			var serializedString = ciRelToSerialize.getSerializedString(ciRelobj);
+			var queueData = new CITreeSPProcessingQueueData(entryType, dataType, ciRelobj.child.company);
+			var data = queueData.getData(null, serializedString, dateTimeObj);
+		}
+
+		if (data.data != null) {
+			queueElement = new CITreeSPProcessingQueue().getLastEntry(entryType, null, dateTimeObj, ">", queueData.getGRsysID());
+		} else {
+			this.error = "Queue data element could not be uploaded";
+			this.setError(this.error);
+			this.log.info("[loadEntryByQueueData]" + this.error);
+		}
+
+		if (queueElement == null) {
+			this.log.info("[loadEntryByQueueData] queueElement is null");
+		}
+		this.log.info("[loadEntryByQueueData] End");
+
+		return queueElement;
+	},
+
+	type: 'CITreeSPProcessingQueue'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>5506e2ffdb68c4d08471a7c7489619f5</sys_id>
+        <sys_mod_count>220</sys_mod_count>
+        <sys_name>CITreeSPProcessingQueue</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_5506e2ffdb68c4d08471a7c7489619f5</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:35:28</sys_updated_on>
+    </sys_script_include>
+</record_update>

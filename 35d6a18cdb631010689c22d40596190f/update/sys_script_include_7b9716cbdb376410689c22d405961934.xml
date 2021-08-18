@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SubGraphUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>SubGraph API:  Utility class</description>
+        <name>SubGraphUtil</name>
+        <script><![CDATA[/**SNDOC
+    @name SubGraphUtil
+    @description API for SubGraph (PN-252)
+    @see https://
+    @domain API
+    @author andreas.reermann@atos.net
+    @version 1.0.0
+    */
+
+var SubGraphUtil = Class.create();
+
+SubGraphUtil.OK = 'OK';
+
+SubGraphUtil.error = {
+    "undefined": "undefined error",    
+    "api_exp": "Exception in SubGraphAPI",
+    "missing_param": "Missing Parameter",
+    "invalid_param": "Invalid Parameter",
+    "unknown_table": "Unknown Table",
+    "internal_direction_error": "Direction not valid in this context: ",
+
+    "unknown_ctx_object": "Unknown Context Object",
+    "unknown_bs": "Unknown Business Service: ",
+
+    "node_overflow": "Number of vertices exceeds the limit: ",
+    "edge_overflow": "Number of edges exceeds the limit: ",
+    "depth_overflow": "Depth exceeds Max Depth: ",
+    "timeout": "Timeout: "
+};
+
+SubGraphUtil.direction = {
+    "inbound": "inbound",
+    "outbound": "outbound",
+    "any": "any"
+};
+
+SubGraphUtil.manager = {
+    "itom": "ITOM",
+    "bridge": "BRIDGE",
+    "any": "ANY"
+};
+
+// *********************************
+
+// *** CMDB Table ***
+// fields from [cmdb_ci]
+SubGraphUtil.cmdbFields= {
+    "sys_id": '',
+    "name": '',
+    "sys_class_name": ''            
+};
+
+// *** STATE Tables ***
+// fields from [x_atpu_rtsm_ci_tree_state_persistency]
+SubGraphUtil.stateRTSM = {
+    "state_intrinsic": 5, 
+    "state_potential": 5, 
+    "upstream_state": 0,
+    "is_cluster": false,         
+    "is_root_ci": false,    
+    "is_connector_ci": false
+};
+
+// fields used from [em_impact_status]
+SubGraphUtil.statusITOM = {
+    "severity": 5, //default: Ok
+    "self_severity": 5, //default: Ok
+    "contributed_severity": 0
+};  
+
+// *** Relation Tables ***
+// fields used from [x_atpu_rtsm_rtsm_cmdb_rel_ci]
+SubGraphUtil.relationRTSMIgnore= {
+    "sys_created_on": false,
+    "sys_updated_by": false,
+    "sys_created_by": false,
+    "sys_mod_count": true,
+    "sys_updated_on": false,      
+};
+
+// fields used from [em_impact_graph]
+SubGraphUtil.relationITOMOnly = {
+    "sys_id": '',
+    "name": '',
+    "business_service": '',
+    "child_id": '',
+    "parent_id": '',
+    "child_name": '',
+    "display_value": '',
+    "percent_outage": 0,
+    "is_service": 0,
+    "contribution_percent": 0
+};   
+
+// ********************************
+SubGraphUtil.tableRTSM = {
+    "rtsm_cmdb_rel_ci": 'x_atpu_rtsm_rtsm_cmdb_rel_ci',
+    "rtsm_ci_tree_state_persistency": "x_atpu_rtsm_ci_tree_state_persistency"
+};
+
+SubGraphUtil.tableITOM = {
+    "em_impact_graph": 'em_impact_graph',
+    "em_impact_status": 'em_impact_status'
+};
+
+// ********************************
+
+SubGraphUtil.prototype = {
+
+    initialize: function() {
+        this.irr = new IRR();
+    },
+    getDomain: function (ctxObjectId) {        
+        var clazz = SubGraphUtil.getClassOfCI(ctxObjectId);
+
+        if (!gs.nil(clazz)) {
+            if (this.irr.isBridgeNode(clazz))
+                return RTSMConst.Manager_Bridge;
+            else
+                return RTSMConst.Manager_Itom;
+        } else
+            return null;
+     },    
+
+     isConnector: function (ctxObjectId) {
+        var clazz = SubGraphUtil.getClassOfCI(ctxObjectId);
+        if (!gs.nil(clazz)) {
+            if (this.irr.isConnectorNode(SubGraphUtil.getClassOfCI(ctxObjectId)))
+                return true;
+            else
+                return false;
+        } else
+            return false;
+     },    
+
+     type: 'SubGraphUtil'
+};
+
+// ############################################################
+SubGraphUtil.getClassOfCI = function(ciId) {
+    var gr = new GlideRecord('cmdb_ci');
+    if (!gr.get(ciId))
+        return null;
+    var clazz = gr.getValue('sys_class_name');
+    return clazz;
+};
+
+// check if edge is already in arrEdge
+// return index of found edge in array
+SubGraphUtil.checkEdgeKnown = function(arrEdge, edge) {
+    var length = arrEdge.length;
+    for (var i = 0; i < length; i++) {
+         if (arrEdge[i].from == edge.from && arrEdge[i].to == edge.to) {
+            arrEdge[i].isLoop = 1;
+            return i;
+        }
+    }
+    return -1;
+};
+
+// in case of ctx object = BS and direction is outbound we must correct Manager and the data source to ITOM
+SubGraphUtil.getConnector = function(arrVtx, bsID) {
+    for (var i = 0; i < arrVtx.length; i++) {
+         if (arrVtx[i].id == bsID) {
+            // arrVtx[i].manager = RTSMConst.Manager_Itom;
+            // arrVtx[i].state.source = SubGraphUtil.tableITOM["em_impact_status"];
+            return arrVtx[i];
+        }
+    }
+    return null;
+};
+
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-05-03 08:00:27</sys_created_on>
+        <sys_id>7b9716cbdb376410689c22d405961934</sys_id>
+        <sys_mod_count>72</sys_mod_count>
+        <sys_name>SubGraphUtil</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_7b9716cbdb376410689c22d405961934</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-07-07 09:09:51</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SacmDecommissionedCIinfo</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Help to handle decommissioned CI states.</description>
+        <name>SacmDecommissionedCIinfo</name>
+        <script><![CDATA[/**SNDOC
+	@name SacmDecommissionedCIinfo
+	@description Help to handle decommissioned CI states.
+	@domain Utilities
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var SacmDecommissionedCIinfo = Class.create();
+SacmDecommissionedCIinfo.prototype = {
+    initialize: function () {},
+    /**SNDOC
+    	@name decommissionedOrNot
+    	@description check if CI is in any of decommissioned states.
+        @param {String} [ciSysId] - sys_id of CI in question
+        @returns true if CI is in any of decommissioned states and false otherwise
+    	*/
+    decommissionedOrNot: function (ciSysId) { //.
+        var states = new RTSMUtil().getProperty('cmdb.decommissionedstates'); // System Property stores values Decommissioned 15, 																	      // Disposed 18, Retired 6.
+        var CI = new GlideRecord('cmdb_ci');
+        CI.addQuery('sys_id', 'IN', ciSysId); //sys_id of the CI to be enquired
+        CI.addQuery('operational_status', 'IN', states);
+        //gs.log(this.states);
+        CI.query();
+
+        if (CI.next()) {
+            return true;
+        } // true for values decommissioned values defined in the sytem                                                                 // property 'cmdb.decommissionedstates'
+        else return false;
+    },
+    /**SNDOC
+    	@name decommissionedStates
+        @description returns decommissioned states
+        @returns {Array} returns decommissioned states. e.g. values Decommissioned 15, Disposed 18, Retired 6.
+    	*/
+    decommissionedStates: function () { //
+        var states = new RTSMUtil().getProperty('cmdb.decommissionedstates'); // stores values Decommissioned 15, Disposed 18, 
+        // Retired 6.
+        var array = states.split(","); //can be used as an array, example array[0] = 15
+
+        return array;
+
+
+    },
+
+    type: 'SacmDecommissionedCIinfo'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>hendrik.muller</sys_created_by>
+        <sys_created_on>2020-11-02 13:15:03</sys_created_on>
+        <sys_id>ce4e462cdb502010689c22d405961950</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>SacmDecommissionedCIinfo</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_ce4e462cdb502010689c22d405961950</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 14:05:09</sys_updated_on>
+    </sys_script_include>
+</record_update>

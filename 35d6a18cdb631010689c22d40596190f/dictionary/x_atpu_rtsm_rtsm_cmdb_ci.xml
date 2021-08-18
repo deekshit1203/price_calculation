@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="RTSM CMDB CI" max_length="40" name="x_atpu_rtsm_rtsm_cmdb_ci" type="collection">
+        <element label="CMDB CI" max_length="32" name="cmdb_ci" reference="cmdb_ci" type="reference"/>
+        <element label="Company" max_length="32" name="company" reference="core_company" type="reference"/>
+        <element label="Domain" max_length="40" name="sys_domain" type="domain_id"/>
+        <element label="Domain Path" max_length="255" name="sys_domain_path" type="domain_path"/>
+        <index name="index">
+            <element name="cmdb_ci"/>
+        </index>
+        <index name="index2">
+            <element name="sys_domain"/>
+        </index>
+        <index name="index3">
+            <element name="company"/>
+        </index>
+        <index name="index4">
+            <element name="sys_domain_path"/>
+        </index>
+    </element>
+</database>

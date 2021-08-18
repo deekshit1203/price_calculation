@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.AJAXInstaller</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description>Trigger RTSM Post Installation via UI Page RTSM Post Install Dialog</description>
+        <name>AJAXInstaller</name>
+        <script><![CDATA[/**SNDOC
+	@name AJAXInstaller
+	@description 
+	@domain Utilities
+	@author 
+	@version 1.0.0
+	*/
+/*
+	This Script must be called after every Application Update!!!
+
+	Check if api_name 'global.RTSMGlobalScopeUtils' already exits		
+	1. Check if SI global.RTSMGlobalScopeUtils already exist
+		YES
+			PATCH	-> UPDATE
+		NO
+			POST	-> INSERT
+
+*/	
+var AJAXInstaller = Class.create();
+AJAXInstaller.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+
+	doPostInstallation: function() {
+		
+		log = new RTSMLog('RTSM Post Installation', "PostInstallation");
+		sEndpoint = gs.getProperty('glide.servlet.uri') + 'api/now/table/sys_script_include';
+
+		sUser = this.getParameter('sysparm_user_name');
+		sPwd = this.getParameter('sysparm_user_password');
+		//log.debug(sUser + ' / ' + sPwd);
+		// Auth Profile user
+		authProfileUser = 'andreas.reermann@atos.net';
+		//var authProfileUser = 'admin';
+
+		// Real RTSMGlobalScopeUtils Script Include
+		globalJson = {
+			name: "RTSMGlobalScopeUtils",
+			api_name: "global.RTSMGlobalScopeUtils",
+			sys_scope: "Global",
+			access: "public",
+			description: "RTSM API for access NOW Global Functionality",
+			script: "var RTSMGlobalScopeUtils = Class.create();RTSMGlobalScopeUtils.prototype = {    type: 'RTSMGlobalScopeUtils'}; RTSMGlobalScopeUtils.sleep = function (duration) {	 gs.sleep(duration); }; RTSMGlobalScopeUtils.scopedImpersonate = function (userSysID) {		 new GlideImpersonate().impersonate(userSysID); }; RTSMGlobalScopeUtils.doPostInstallation = function () {	var bImport = new GlideRecord('sys_user').get('user_name', 'RTSM QueryBuilderUser');	 if (!bImport) {		 var grUser = new GlideRecord('sys_user');		 grUser.initialize();		 grUser.setValue('user_name', 'RTSM QueryBuilderUser');		 grUser.setValue('first_name', 'RTSM');		 grUser.setValue('last_name', 'QueryBuilderUser');		 grUser.setValue('sys_domain', 'global');		 grUser.setValue('active', true);		 var userSysId = grUser.insert();		 var grRole = new GlideRecord('sys_user_role');		 grRole.addQuery('name', 'cmdb_query_builder');		 grRole.query();		 if (grRole.next()) {			 id_cmdb_query_builder = grRole.getValue('sys_id');		 }		 var grUserHasRole = new GlideRecord('sys_user_has_role');		 grUserHasRole.initialize();		 grUserHasRole.setValue('user', userSysId);		 grUserHasRole.setValue('role', id_cmdb_query_builder);		 grUserHasRole.insert();	 }	 var bTrigger = new GlideRecord('sys_trigger').get('name', 'RTSM CITreeSP_processor');	 if (!bTrigger) {			 var grTrg = new GlideRecord('sys_trigger');		 grTrg.initialize();		 grTrg.setValue('name', 'RTSM CITreeSP_processor');		 grTrg.setValue('system_id', 'ACTIVE NODES');		 grTrg.setValue('job_context', \"fcScriptName=javascript:GlideEventManager('citreesp').process()\");		 grTrg.setValue('trigger_type', '10');		 grTrg.setValue('repeat', '1970-01-01 00:00:10');		 grTrg.insert();	 }		var grQB = new GlideRecord('sys_db_object');	grQB.query('name', 'sysauto_query_builder');	grQB.query();	grQB.next();	 if (grQB.getValue('create_access') == false) {			grQB.setValue('create_access', true);		grQB.setValue('update_access', true);		grQB.setValue('delete_access', true);		grQB.update();	}	grQB = new GlideRecord('sys_db_object');	grQB.query('name', 'sysauto');	grQB.query();	grQB.next();	 if (grQB.getValue('create_access') == false) {			grQB.setValue('create_access', true);		grQB.setValue('update_access', true);		grQB.setValue('delete_access', true);		grQB.update();	}	grSI = new GlideRecord('sys_script_include');	grSI.query('api_name', 'global.JSUtil');	grSI.query();	grSI.next();	 if (grSI.getValue('access') != 'public') {			grSI.setValue('access', 'public');		grSI.update();	}	 }; RTSMGlobalScopeUtils.setCrossScope = function (tableName, fullTableAccess) {	var grApp = new GlideRecord('sys_scope');	grApp.get('scope', 'x_atpu_rtsm');	rtsmSysId = grApp.sys_id;		var grCS = new GlideRecord('sys_scope_privilege');	grCS.query('source_scope', rtsmSysId);	grCS.query('target_scope', 'global');	grCS.query('target_name', tableName);	grCS.query();	if (grCS.getRowCount() == 0) {			var grCS1 = new GlideRecord('sys_scope_privilege');		grCS1.initialize();		grCS1.setValue('sys_scope', rtsmSysId);				grCS1.setValue('source_scope', rtsmSysId);		grCS1.setValue('target_scope', 'global');		grCS1.setValue('target_name', tableName);		grCS1.setValue('status', 'allowed');		grCS1.setValue('target_type', 'sys_db_object');			grCS1.setValue('operation', 'read');				grCS1.insert();			if (fullTableAccess) {			grCS1.setValue('operation', 'create');					grCS1.insert();			grCS1.setValue('operation', 'write');					grCS1.insert();					grCS1.setValue('operation', 'delete');					grCS1.insert();			}		}};	"
+			};		
+		
+		log.debug('[doPostInstallation] START')	
+		try { 
+			var sysID = this._checkExisting(log, sEndpoint, globalJson, sUser, sPwd);
+			if (gs.nil(sysID)) {
+				// POST
+				log.debug('[doPostInstallation] POST');			
+				this._doPost(log, sEndpoint, globalJson, sUser, sPwd);
+			} else {
+				// PATCH
+				log.debug('[doPostInstallation] PATCH');
+				sEndpoint = sEndpoint + '/' + sysID;			
+				this._doPatch(log, sEndpoint, globalJson, sUser, sPwd);
+			}
+
+			// AR 2021-08-04
+			log.debug('[doPostInstallation] global.RTSMGlobalScopeUtils.doPostInstallation START');	
+			global.RTSMGlobalScopeUtils.doPostInstallation();
+			log.debug('[doPostInstallation] global.RTSMGlobalScopeUtils.doPostInstallation END');	
+
+		} catch(excep) {
+			log.error('[doPostInstallation] RTSM Post Installation failed: ' + excep.message);		
+			return false;
+		} 
+		log.debug('[doPostInstallation] END')	
+		return true;
+	},
+	
+	_checkExisting: function (log, sEndpoint, globalJson, sUser, sPwd) {
+		log.debug('[_checkExisting]')
+		var request = new sn_ws.RESTMessageV2();
+		this._prepareRequest(request, log, sEndpoint, globalJson, sUser, sPwd);
+		request.setHttpMethod('GET');
+		request.setQueryParameter("sysparm_query","api_name=global.RTSMGlobalScopeUtils");
+		request.setQueryParameter("sysparm_fields", "sys_id");	
+		var response = request.execute();
+		var responseBody = response.getBody();
+		var bodyObj = global.JSON.parse(responseBody);
+		var a = bodyObj.result;	
+		// log.debug('[_checkExisting] a.length=' + a.length);
+
+		if (a.length > 0) {		
+			var resultObj =	a[0];
+			log.debug('[_checkExisting] ScriptInclude sys_id=' + resultObj.sys_id);
+			return resultObj.sys_id
+		} else {
+			log.debug('[_checkExisting] ScriptInclude NOT exist');
+			return null;
+		}
+	},
+
+	_doPatch: function (log, sEndpoint, globalJson, sUser, sPwd) {
+		log.debug('[_doPatch]');
+		var request = new sn_ws.RESTMessageV2();
+		this._prepareRequest(request, log, sEndpoint, globalJson, sUser, sPwd);
+		request.setHttpMethod('PATCH');
+		var response = request.execute();
+		return true;
+	},
+
+	_doPost: function () {
+		log.debug('[_doPost]');
+		var request = new sn_ws.RESTMessageV2();
+		this._prepareRequest(request, log, sEndpoint, globalJson, sUser, sPwd);
+		request.setHttpMethod('POST');
+		var response = request.execute();
+		return true;
+	},
+
+	_prepareRequest: function(request, log, sEndpoint, globalJson, sUser, sPwd) {
+		log.debug('[_prepareRequest]: ' + sEndpoint);	
+		request.setEndpoint(sEndpoint);
+		request.setRequestHeader("Accept","application/json");
+		request.setRequestHeader('Content-Type','application/json');
+
+		// authProfileUser = 'andreas.reermann@atos.net';
+		// var grPro = new GlideRecord('sys_auth_profile_basic');
+		// grPro.get('name', authProfileUser);
+		// if (grPro.isValid()) {
+		// 	request.setAuthenticationProfile('basic', grPro.sys_id);
+		// } else {
+		// 	log.error('AuthenticationProfile admin not Found');
+		// }
+		
+		request.setBasicAuth(sUser,sPwd);
+		
+		request.setRequestBody(JSON.stringify(globalJson));
+	},	
+
+	type: 'AJAXInstaller'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-03-16 12:56:35</sys_created_on>
+        <sys_id>351f883bdb3ee010689c22d405961957</sys_id>
+        <sys_mod_count>24</sys_mod_count>
+        <sys_name>AJAXInstaller</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_351f883bdb3ee010689c22d405961957</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-04 14:19:36</sys_updated_on>
+    </sys_script_include>
+</record_update>

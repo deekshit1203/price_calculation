@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>false</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_atpu_rtsm_citreesp_cmdb_query_registry</collection>
+        <condition/>
+        <description/>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>ciTreeSPcmdbQRInsert</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[/**
+	@domain CMDB Query Register
+*/
+(function executeRule(current, previous /*null when async*/) {	
+	
+	if(current.type == 'Generic') {
+		//Type set to Generic
+		
+		//Retrieve the Domain to be used for Generic Entries
+		var dom = new CITreeSPQueryRegistry();
+		var retObj = dom.getGenericDomain();
+		if(retObj.result == true) {
+			//Set SysID of returned Domain to current Object
+			gs.info('Domain of current Object is set from getGenericDomain ' + retObj.domain);
+			
+			current.sys_domain = retObj.domain;			
+		}
+		else {
+			//Create Error and Abort Action
+			gs.error('Create Error and Abort Action when value of result is not true');
+			
+			gs.addErrorMessage(gs.getMessage('Unable to save new entry as assigning the Domain < ' + retObj.domainName + ' > to Generic CMDB Query Registry Entry < ' + current.query + ' > is not possible. The provided Domain could not be found'));
+			current.setAbortAction(true);
+		}
+	}
+	else {		
+		if(current.type == 'Customer Specific')  {
+			//Type set to Customer Specific
+			
+			if(current.customer) {
+				//Customer is NOT null
+				
+				//Set Domain value from customer to current object
+				gs.info('Domain of customer is set to current object '+ current.customer.sys_domain);
+				
+				current.sys_domain = current.customer.sys_domain;				
+			}
+			else {
+				//Create Error and Abort Action
+				gs.error('Unable to Save New Entry as no Customer is set');
+				
+				gs.addErrorMessage(gs.getMessage('Unable to Save New Entry as no Customer is set'));
+				current.setAbortAction(true);				
+			}
+		}
+		else {
+			//Create Error and Abort Action
+			gs.info('Unable to Save New Entry as an invalid Type was given');
+			
+			gs.addErrorMessage(gs.getMessage('Unable to Save New Entry as an invalid Type was given'));
+			current.setAbortAction(true);
+		}
+	}	
+	
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>9b86d8af1bc5f7c05408a9fe6e4bcb3b</sys_id>
+        <sys_mod_count>37</sys_mod_count>
+        <sys_name>ciTreeSPcmdbQRInsert</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_9b86d8af1bc5f7c05408a9fe6e4bcb3b</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-02-04 11:19:22</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+    <sys_translated_text action="delete_multiple" query="documentkey=9b86d8af1bc5f7c05408a9fe6e4bcb3b"/>
+</record_update>

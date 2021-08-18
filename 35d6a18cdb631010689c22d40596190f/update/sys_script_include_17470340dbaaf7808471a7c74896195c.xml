@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessingQueueData</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>CITreeSPProcessingQueueData</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessingQueueData
+	@description Inserts queue data into the citreesp_queue_data and provides a generator for queue data retrieval
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessingQueueData = Class.create();
+CITreeSPProcessingQueueData.prototype = {
+	/**SNDOC
+	@name initialize
+	@description initialize CITreeSPProcessingQueueData
+	@param {*} [queueType]
+	@param {*} [dataType]
+	@param {String} [customer] - sys_id of customer
+	 */
+	initialize: function (queueType, dataType, customer) {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessingQueueData");	
+
+		this.queueType = queueType;
+		this.dataType = dataType;
+		this.customer = customer;
+		this.chunkID = 1;
+		this.gr = null;
+		this.firstInsertedData = '';
+
+	},
+
+	/**SNDOC
+	 @name initGetData
+	 @description Initializes Queue Data from citreesp_queue_data. 
+Initial record is retrieved either by: 
+1. ciRelationToDeserialize
+2. this(queueType, dataType,  customer) && serializedString if not 1.
+3. this(queueType, dataType,  customer) if not 1. && 2.
+	 @param {String} [ciRelationToDeserialize] - sys_id of ci relation to deserialize, Optional.
+	 @param {String} [serializedString] - if ciRelationToDeserialize is not provided, the InitQueueData are searched with data == serializedString. Optional.
+	 @param {GlideDateTime} [dateTimeObj] - ciRelationToDeserialize must be created after dateTimeObj. Optional.
+	 */
+	initGetData: function (ciRelationToDeserialize, serializedString, dateTimeObj) {
+		this.log.debug("Staring initGetData");
+		this.log.info('initGetData : Queue type ' + this.queueType + ' Data Type ' + this.dataType + ' Customer sys_id ' + this.customer);
+
+		var grInitQueueData = new GlideRecord('x_atpu_rtsm_citreesp_queue_data');
+
+		if (ciRelationToDeserialize !== null) {
+			grInitQueueData.addQuery('sys_id', ciRelationToDeserialize);
+
+			if (dateTimeObj !== null) {
+				grInitQueueData.addQuery('sys_created_on', '>', dateTimeObj);
+			}
+
+		} else if (serializedString !== null) {
+
+			grInitQueueData.addQuery('queue_type', this.queueType);
+			grInitQueueData.addQuery('data_type', this.dataType);
+			grInitQueueData.addQuery('customer', this.customer);
+			grInitQueueData.addQuery('data', serializedString);
+			if (dateTimeObj !== null) {
+
+				grInitQueueData.addQuery('sys_created_on', '>', dateTimeObj);
+				this.log.info("dateobject" + dateTimeObj);
+			}
+			grInitQueueData.orderBy('chunk_id');
+		} else {
+
+			grInitQueueData.addQuery('queue_type', this.queueType);
+			grInitQueueData.addQuery('data_type', this.dataType);
+			grInitQueueData.addQuery('customer', this.customer);
+			grInitQueueData.orderBy('chunk_id');
+			if (dateTimeObj !== null) {
+
+				grInitQueueData.addQuery('sys_created_on', '>', dateTimeObj);
+			}
+		}
+		grInitQueueData.query();
+
+		this.log.debug("initGetData End");
+
+		this.gr = grInitQueueData;
+	},
+	/**SNDOC
+	@name insertData
+	@description inserts data into table citreesp_queue_data. Insertion is done in chunks.
+	@param {*} [data] - the data to insert into the `data` field
+	@returns {String} sys_id of inserted record (the current chunk).
+	 */
+	insertData: function (data) {
+
+		this.log.info("insertData: Data is: " + data);
+		var tempSysId;
+
+		var grCITreeSPQueueData = new GlideRecord('x_atpu_rtsm_citreesp_queue_data');
+		grCITreeSPQueueData.setValue('queue_type', this.queueType);
+		grCITreeSPQueueData.setValue('data_type', this.dataType);
+		if (this.customer === null || !this.customer) {
+
+		} else {
+			grCITreeSPQueueData.setValue('customer', this.customer);
+		}
+		grCITreeSPQueueData.setValue('chunk_id', this.chunkID);
+		grCITreeSPQueueData.setValue('data', data);
+		tempSysId = grCITreeSPQueueData.insert();
+
+		if (this.chunkID == 1) {
+			this.firstInsertedData = tempSysId;
+		}
+		this.chunkID++;
+		this.log.info("insertData: Returned Value from insert operation is : " + tempSysId);
+		return tempSysId;
+	},
+
+	/**SNDOC
+	@name deleteAllData
+	@description query table `citreesp_queue_data`by (queue_type, data_type, customer (if not null)) and delete all records found.
+	 */
+	deleteAllData: function () {
+
+		this.log.info('deleteAllData : Entering the function');
+		var grQueueData = new GlideRecord('x_atpu_rtsm_citreesp_queue_data');
+		grQueueData.addQuery('queue_type', this.queueType);
+		grQueueData.addQuery('data_type', this.dataType);
+		if (this.customer === null || !this.customer) {
+
+		} else {
+			grQueueData.addQuery('customer', this.customer);
+		}
+		this.log.info('deleteAllData : Queue Type ' + this.queueType + ' Data Type ' + this.dataType + ' Customer ' + this.customer);
+		grQueueData.deleteMultiple();
+
+	},
+	
+	/**SNDOC
+	@name getData
+	@description generator to read processing queue data from successive chunks. 
+	- Returns one chunk at a time. 
+	- Return object has property: `moreData`set to true if there are more chunks available.
+
+	Initial record is retrieved either by: 
+	1. ciRelationToDeserialize
+	2. this(queueType, dataType,  customer) && serializedString if not 1.
+	3. this(queueType, dataType,  customer) if not 1. && 2.
+		 @param {String} [ciRelationToDeserialize] - sys_id of ci relation to deserialize, Optional.
+		 @param {String} [serializedString] - if ciRelationToDeserialize is not provided, the InitQueueData are searched with data == serializedString. Optional.
+		 @param {GlideDateTime} [dateTimeObj] - ciRelationToDeserialize must be created after dateTimeObj. Optional.
+		 @returns {String} the queueData of the current chunk
+	 */
+	getData: function (ciRelationToDeserialize, serializedString, dateTimeObj) {
+
+		this.log.info("getData: into the getData");
+		var queueData;
+
+		if (!ciRelationToDeserialize) {
+			ciRelationToDeserialize = null;
+		}
+		if (!serializedString) {
+			serializedString = null;
+		}
+		if (!dateTimeObj) {
+			dateTimeObj = null;
+		}
+
+		var retObj = {
+			moreData: false,
+			data: ''
+		};
+		this.log.info('getData:' + this.gr);
+		if (this.gr == null) {
+			this.log.info("getData: gr is null");
+			this.initGetData(ciRelationToDeserialize, serializedString, dateTimeObj);
+		}
+
+		if (this.gr.next()) {
+			queueData = this.gr.data.toString();
+			retObj.data = queueData;
+
+			if (this.gr.hasNext()) {
+				retObj.moreData = true;
+			}
+			this.log.info("getData next record processed, retObj, moreData: " + retObj.moreData + ", retObj data: " + retObj.data);
+			return retObj;
+
+		} else {
+			retObj.data = null;
+			this.log.info("getData: next record not available, retObj, moreData: " + retObj.moreData);
+			return retObj;
+		}
+	},
+	/**SNDOC
+	@name getMaxDataSize
+	@description maxDataSize in Bytes
+	@returns maxDataSize in Bytes
+
+	 */
+	getMaxDataSize: function () {
+
+		var bytes = 3355443;
+		this.log.info('getMaxDataSize : Maximum Data Size ' + bytes);
+		return bytes;
+	},
+
+
+	/**SNDOC
+		@name getFirstInsertedData
+		@description the sys_id of first chunk in a data chain in `citreesp_queue_data`
+		@author ATF2
+		@returns {String} firstInsertedData
+		*/
+	getFirstInsertedData: function () {
+		return this.firstInsertedData;
+	},
+
+	/**SNDOC
+		@name getGRsysID
+		@description The sys_id of the current chunk in `citreesp_queue_data`
+		@author ATF2
+		@returns {String} The sys_id of the current chunk in `citreesp_queue_data` or null
+		*/
+	getGRsysID: function () {
+
+		if (!this.gr) {
+			return null;
+		} else {
+			return this.gr.sys_id;
+		}
+	},
+
+	type: 'CITreeSPProcessingQueueData'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>17470340dbaaf7808471a7c74896195c</sys_id>
+        <sys_mod_count>152</sys_mod_count>
+        <sys_name>CITreeSPProcessingQueueData</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_17470340dbaaf7808471a7c74896195c</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-10-30 16:50:40</sys_updated_on>
+    </sys_script_include>
+</record_update>

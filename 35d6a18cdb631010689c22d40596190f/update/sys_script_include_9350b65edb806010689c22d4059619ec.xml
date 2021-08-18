@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.FunnelQueueExecutor</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Processing Queue Executor</description>
+        <name>FunnelQueueExecutor</name>
+        <script><![CDATA[/**SNDOC
+	@name FunnelQueueExecutor
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var FunnelQueueExecutor = Class.create();
+FunnelQueueExecutor.prototype = {
+
+	/**SNDOC
+	  @name initialize
+	  @description 
+	  @param {Number} [property_max_count_per_process] - maximum events to be assigned to one executor process
+	  @param {Number} [property_max_processes] - maximum number of executor processes allowed
+	  @param {String} [table_name] 
+	  @param {String} [event_name] 
+	 */
+	initialize: function (property_max_count_per_process, property_max_processes, table_name, event_name) {
+		this.property_max_count_per_process = property_max_count_per_process;
+		this.property_max_processes = property_max_processes;
+		this.table_name = table_name;
+		this.event_name = event_name;
+		
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "FunnelQueueExecutor");
+		this.qState = RTSMConst.QueueState;	
+
+		this.log.trace('[FunnelQueueExecutor.initialize] table_name=' + this.table_name + ' event_name=' + this.event_name 
+			+ ' property_max_count_per_process=' + this.property_max_count_per_process + ' property_max_processes=' + this.property_max_processes);
+	},
+
+	/**SNDOC
+		@name run
+		@description select ready events into active processing queue
+- sets events in table to READY, if they have exeeded the maximum wait time. 
+- Selects ready events to be processed, but dependent on free processing slots. 
+- These slots are calculated from property_max_processes and property_max_count_per_process.
+- READY events are finally put into an active running event queue
+		@author ATF2
+		*/
+	run: function () {
+		this.log.trace("[FunnelQueueExecutor.run] Start");
+		// event processor should not pick up new events before all new events are queued
+		var tempEventQueue = "";
+		var finalEventQueue = "";
+		// get dummy event queue, to put new events in => no processor is assigned with
+		var grEventRegistry = new GlideRecord("sysevent_register");
+		if (grEventRegistry.get("event_name", this.event_name) && !grEventRegistry.queue.nil()) {
+			tempEventQueue = "Funnel." + grEventRegistry.sys_id;
+			finalEventQueue = grEventRegistry.getValue("queue");
+		}
+	
+		// target table for new events (GlideRecord.updateMultiple() will not work on table rotation)
+		var activeShard = this.getCurrentShard("sysevent");
+		
+		// set events to READY which waited long enough
+		var queueRecord = new GlideRecord(this.table_name);
+		queueRecord.addQuery("state", this.qState.WAIT);
+		queueRecord.orderBy("sys_created_on");
+		queueRecord.query();
+		this.log.trace('[FunnelQueueExecutor.run] [queueRecord]= ' + RTSMLog.logQuery(queueRecord));
+		while (queueRecord.next()) {
+			var diffSeconds = 0;
+			// Get the Maximum Wait Time from System Property
+			var maximumWaitTimeAttribute = Number(new RTSMUtil().getProperty(RTSMConst.citreesp_cmdbdataimport_leftover_wait_time));
+
+			maximumWaitTimeAttribute = parseInt(maximumWaitTimeAttribute);
+
+			// AR dateDiff not in Scoped App
+			// diffSeconds = gs.dateDiff(queueRecord.sys_updated_on, gs.nowDateTime(), true);
+			// diffSeconds = parseInt(diffSeconds); //String to Integer
+			diffSeconds = GlideDateTime.subtract(new GlideDateTime(queueRecord.sys_updated_on), new GlideDateTime()).getNumericValue();	
+
+			if (diffSeconds >= maximumWaitTimeAttribute) {
+				// Wait state exceeded the Maximum Wait Time
+				queueRecord.state = this.qState.READY;
+			}
+			queueRecord.update();
+		}
+
+		var grQueue = new GlideRecord(this.table_name);
+		grQueue.addQuery("state", this.qState.READY);
+		grQueue.orderBy("sys_created_on");
+		grQueue.query();	
+		this.log.trace('[FunnelQueueExecutor.run] [grQueue]= ' + RTSMLog.logQuery(grQueue));
+		
+		if (!grQueue.hasNext()) {
+			return;
+		}
+
+		// count number of processes READY for execution
+		var max_count_per_process = Number(new RTSMUtil().getProperty(this.property_max_count_per_process));
+		var max_processes = Number(new RTSMUtil().getProperty(this.property_max_processes));
+		
+		var count = new GlideAggregate('sysevent');
+		count.addQuery("name", this.event_name);
+		count.addQuery("state", "!=", "processed");
+		count.addQuery("state", "!=", "error");
+		count.addQuery("state", "!=", "transferred");
+		count.addAggregate('COUNT', 'state');
+		count.query();	
+		this.log.trace('[FunnelQueueExecutor.run] [count]= ' + RTSMLog.logQuery(count));
+		
+		var num_processes = 0;
+		var ready_count = 0;
+		var freeSlots = 0;
+
+		while (count.next()) {
+			if (count.state == "ready") {
+				ready_count = count.getAggregate('COUNT', 'state');
+			} else {
+				num_processes++;
+			}
+		}
+
+		// find free slots for processing. Must be <= than max_count_per_process and a process must be available
+		// put ready events into temp eventQueue, but maximum for free_slots
+		if (ready_count > 0 && (ready_count < max_count_per_process || max_processes == 0)) { // max_processes == 0 => don't care
+			freeSlots = max_count_per_process - ready_count;
+		} else if (ready_count == 0 && num_processes < max_processes) {
+			freeSlots = max_count_per_process;
+		}
+
+		while (freeSlots > 0 && grQueue.next()) {
+			grQueue.state = this.qState.QUEUED;
+			grQueue.update();	
+			gs.eventQueue(this.event_name, grQueue, '', '', tempEventQueue);
+			freeSlots--;
+		}
+		// until here we worked with a temp queue at which no processing takes place
+
+		// update new events: assign to target event queue
+		if (!finalEventQueue && max_processes != 0) {
+			// updateMultiple will not clear values. As we cannot update queue on all events at a time, target queue was already used when queueing events. Nothing left to do
+			// max_processes == 0 => don't care
+			gs.error("Limitation of process count not safe: use a dedicated event queue! sysevent: " + this.event_name, "FunnelFiller");
+		} else {
+			var tableName = activeShard === null ? "sysevent" : activeShard.table_name;
+			this.log.debug('tableName: ' + tableName);
+			var grSysEvent = new GlideRecord(tableName);
+			grSysEvent.addQuery("queue", tempEventQueue);
+			grSysEvent.setValue("queue", finalEventQueue);
+			grSysEvent.updateMultiple();
+			
+			// AR 2020-11-09 getGlideObject is not available in scoped applications
+			//if (activeShard.valid_to.getGlideObject().getNumericValue() < new GlideDateTime().getNumericValue()) {
+			if (((new GlideDateTime(activeShard.valid_to)).getNumericValue()) < new GlideDateTime().getNumericValue()) {				
+				// in case shard has changed in between
+				activeShard = this.getCurrentShard("sysevent");
+				grSysEvent = new GlideRecord(activeShard.table_name);
+				this.log.debug('activeShard.table_name: ' + activeShard.table_name);				
+				grSysEvent.addQuery("queue", tempEventQueue);
+				grSysEvent.setValue("queue", finalEventQueue);
+				grSysEvent.updateMultiple();
+			}
+
+			// backup: update one by one (updateMultiple not working, wrong shard, ...)
+			grSysEvent = new GlideRecord("sysevent");
+			grSysEvent.addQuery("queue", tempEventQueue);
+			grSysEvent.query();
+			while (grSysEvent.next()) {
+				grSysEvent.setValue("queue", finalEventQueue);
+				grSysEvent.update();
+			}
+		}
+			
+		this.log.trace("[FunnelQueueExecutor.run] End");
+	},
+/**SNDOC
+  @name getCurrentShard
+  @description Select a sys_table_rotation_schedule record that is not offline, has a name.name of tableName and is valid_to > now.
+  @see https://docs.servicenow.com/bundle/paris-platform-administration/page/administer/platform-performance/concept/c_TableRotation.html
+  @param {String} [tableName] - The tableName to find a shard for.
+  @returns {sys_table_rotation_schedule} The shard that has the max valid_to DateTime of all shards found. Null if none was found.
+ */
+	getCurrentShard: function (tableName) {
+		var gr = new GlideRecord("sys_table_rotation_schedule");
+		gr.addQuery("offline", false);
+		gr.addQuery("name.name", tableName);
+		gr.addQuery("valid_to", ">", new GlideDateTime());
+		gr.orderBy("valid_to");
+		gr.query();
+		if (!gr.next()) {
+			return null;
+		}
+		return gr;
+	},
+
+	type: 'FunnelQueueExecutor'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>hendrik.muller</sys_created_by>
+        <sys_created_on>2020-10-26 15:58:14</sys_created_on>
+        <sys_id>9350b65edb806010689c22d4059619ec</sys_id>
+        <sys_mod_count>58</sys_mod_count>
+        <sys_name>FunnelQueueExecutor</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_9350b65edb806010689c22d4059619ec</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-05 05:08:39</sys_updated_on>
+    </sys_script_include>
+</record_update>

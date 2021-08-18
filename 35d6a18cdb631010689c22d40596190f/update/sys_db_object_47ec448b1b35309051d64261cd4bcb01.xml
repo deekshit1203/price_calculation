@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_db_object">
+    <sys_db_object action="INSERT_OR_UPDATE">
+        <access/>
+        <actions_access>true</actions_access>
+        <alter_access>true</alter_access>
+        <caller_access/>
+        <client_scripts_access>true</client_scripts_access>
+        <configuration_access>false</configuration_access>
+        <create_access>true</create_access>
+        <create_access_controls>false</create_access_controls>
+        <delete_access>false</delete_access>
+        <extension_model/>
+        <is_extendable>false</is_extendable>
+        <label>AR:  PHHC  -SubGraph-Query Results</label>
+        <live_feed_enabled>false</live_feed_enabled>
+        <name>x_atpu_rtsm_u_cmdb_qb_result_85f9c2c55c394dd1c79f0810dd02c633b6a00cf2</name>
+        <number_ref/>
+        <provider_class/>
+        <read_access>true</read_access>
+        <scriptable_table>false</scriptable_table>
+        <super_class display_value="Query Builder Results" name="cmdb_qb_result_base">2cb4f4d51b423010e5f386a3604bcb60</super_class>
+        <sys_class_code>!!</sys_class_code>
+        <sys_class_name>sys_db_object</sys_class_name>
+        <sys_class_path>/!!</sys_class_path>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-08-10 08:00:02</sys_created_on>
+        <sys_id>47ec448b1b35309051d64261cd4bcb01</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Rtsm U CMDB Qb Result 85f9c2c55c394dd1c79f0810dd02c633b6a00cf2</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_db_object_47ec448b1b35309051d64261cd4bcb01</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-10 08:00:02</sys_updated_on>
+        <update_access>true</update_access>
+        <user_role/>
+        <ws_access>true</ws_access>
+    </sys_db_object>
+</record_update>

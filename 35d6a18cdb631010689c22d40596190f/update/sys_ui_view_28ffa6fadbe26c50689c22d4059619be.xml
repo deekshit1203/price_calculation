@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_view">
+    <sys_ui_view action="INSERT_OR_UPDATE">
+        <group/>
+        <hidden>false</hidden>
+        <name>exp_dacff6236dbe26c50689c22d4059619fd</name>
+        <roles/>
+        <sys_class_name>sys_ui_view</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-03-01 11:49:45</sys_created_on>
+        <sys_id>28ffa6fadbe26c50689c22d4059619be</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Exp_dacff6236dbe26c50689c22d4059619fd</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_ui_view_28ffa6fadbe26c50689c22d4059619be</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-03-01 11:49:45</sys_updated_on>
+        <title>Exp_dacff6236dbe26c50689c22d4059619fd</title>
+        <user/>
+    </sys_ui_view>
+</record_update>

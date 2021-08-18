@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorDataFilter</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for the CI Tree SP CMDB Data Filtering step.</description>
+        <name>CITreeSPProcessorDataFilter</name>
+        <script><![CDATA[	/**SNDOC
+	@name CITreeSPProcessorDataFilter
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+	var CITreeSPProcessorDataFilter = Class.create();
+	CITreeSPProcessorDataFilter.prototype = Object.extendsObject(CITreeSPProcessor, {
+		initialize: function () {
+			CITreeSPProcessor.prototype.initialize.call(this);
+			this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorDataFilter");
+		},
+		/**SNDOC
+		@name process
+		@description  Processes a request in the CI Tree SP Queue of Type "cmdbFilterCustomer" and "cmdbChangeDetectionCustomer"
+		*/
+		process: function () {
+			this.log.debug("[process] Start");
+			var ciRelMan;
+			var dataChangeDetectionSerializer;
+			var factory = new SerializerFactory();
+			this.filler = new FunnelFiller();
+			this.errorString = "";
+			var dataType = new CIRelationManager().getObjectType();
+
+			try {
+				var custSysID = this.queueEntry.getValue("customer");
+
+				//Create a Serializer object using the SerializerFactory
+				var deserializerObject = factory.createSerializer(RTSMConst.QO.cmdbFilterCustomer, dataType, custSysID);
+				this.log.info("[process] deserializerObject returned is of type SerializerCIRelationManager");
+
+				ciRelMan = deserializerObject.deserialize();
+				if (ciRelMan === null) {
+					//De-serialization was NOT successful
+					this.errorString = deserializerObject.error;
+					this._createEntryForError();
+					this.log.error("[process] De-serialization was NOT successful, Processing Result - ERROR");
+					return;
+				}
+
+				//De-serialization was successful
+				this.log.info("[process] De-serialization was successful. ciRelMan Object returned is of type CIRelationManager, filled with the deserialized data");
+
+				ciRelMan.filterImport();
+
+				//Set Processing Result
+				this.result.validLeaves = ciRelMan.getDecommissionedCICount();
+				this.result.deadLeaves = ciRelMan.getOutOfScopeCIRelCount();
+				this.result.uniqueCis = ciRelMan.getRemovedUnconnectedCICount();
+
+				this.log.info("[process] Valid Leaves= " + this.result.validLeaves + " , Dead Leaves= " + this.result.deadLeaves + " , Unique CIs= " + this.result.uniqueCis);
+
+				//Create a Serializer object using the SerializerFactory
+				var serializerObj = factory.createSerializer(RTSMConst.QO.cmdbChangeDetectionCustomer, dataType, custSysID);
+				this.ret = serializerObj.serialize(ciRelMan);
+				this.log.info("[process] Serializer return " + this.ret);
+
+				if (this.ret === false) {
+					//Serialization was NOT successful
+					this.errorString = serializerObj.error;
+					this._createEntryForError();
+					this.log.error("[process] Serialization was NOT successful, Processing Result - ERROR");
+					return;
+				}
+
+				//Serialization was successful
+				this.log.info("[process] Serialization was successful");
+
+				//Element of type "cmdbChangeDetectionCustomer" is created on the queue
+				this.ret = this.filler.insert(RTSMConst.QO.cmdbChangeDetectionCustomer, custSysID);
+
+				if (this.ret === false) {
+					//FunnelFiller was NOT successful
+					this.errorString = this.filler.error;
+					this._createEntryForError();
+					this.log.error("[process] Completed, Processing Result - ERROR");
+					return;
+				}
+
+				//Entry was saved to the Queue. Old serialized data from the previous step is then deleted from the Queue Data table
+				deserializerObject.deleteOldData();
+
+				//Set Processing Result "OK"
+				this.result.setOk();
+				this.log.info("[process] Processing Result - OK");
+
+			} catch (err) {
+				this.error = err.message + "\n" + err.stack;
+				this.result.setError(this.error);
+			}
+
+			this.log.debug("[process] End");
+		},
+		/**SNDOC
+		@name _createEntryForError
+		@description Element of type "cmdbImportCustomerLeftover" is created on the queue
+		*/
+		_createEntryForError: function () {
+			//Element of type "cmdbImportCustomerLeftover" is created on the queue
+			this.ret = this.filler.insert(RTSMConst.QO.cmdbImportCustomerLeftover, this.queueEntry.getValue("customer"));
+			if (this.ret === false) {
+				//FunnelFiller was NOT successful
+				this.errorString = this.errorString + "\nNumber of cmdbImportCustomerLeftover entries will not match Customer to be imported from Last cmdbImportCustomers entry. A manual fix of the situation has to be done. Error from Funnel Filler: " + this.filler.error;
+
+			}
+
+			this.log.error("[_createEntryForError] " + this.errorString);
+			//Set ERROR on Processing Result
+			this.setError(this.errorString);
+		},
+
+		type: 'CITreeSPProcessorDataFilter'
+	});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>1585dcfcdbc2f78024d2bb1a68961936</sys_id>
+        <sys_mod_count>123</sys_mod_count>
+        <sys_name>CITreeSPProcessorDataFilter</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_1585dcfcdbc2f78024d2bb1a68961936</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-12-21 11:06:29</sys_updated_on>
+    </sys_script_include>
+</record_update>

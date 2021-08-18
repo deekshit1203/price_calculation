@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.IRRManager</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>IRR Manager</description>
+        <name>IRRManager</name>
+        <script><![CDATA[/**SNDOC
+	@name IRRManager
+	@description Managing Impact Rule Register
+                Methods for Class Population: Class-to-Domain and Class-to-Layer
+	@domain Impact Rule Register
+	@author andreas.reermann@atos.net
+	@version 1.0.0
+    */
+   var IRRManager = Class.create();
+   IRRManager.prototype = {
+       initialize: function () {
+           this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "IRRManager");
+           this.arrayUtil = new global.ArrayUtil();
+           this.connectorClasses = [];
+       },
+       
+    /**SNDOC
+        @name populateClasses
+        @description  Class Population: Class-to-Domain and Class-to-Layer
+            Method will be called for testing from form "RTSM Doamain" or by nighty CMDB Sync Job
+        @param
+        @returns 
+        */    
+    populateClasses: function () {    
+        this.log.debug('[IRRManager] [START populateClasses]');
+
+        var grConnector = new GlideRecord('x_atpu_rtsm_connector');
+        grConnector.addQuery('rtsm_domain.manager', RTSMConst.Manager_Itom);
+        grConnector.addQuery('active', true);        
+        grConnector.query();
+        while (grConnector.next()) {
+            this.connectorClasses.push(grConnector.getValue('class_name'));
+        }
+        this.log.debug('[IRRManager] connectorClasses: ' + JSON.stringify(this.connectorClasses));
+
+        var tableName = 'x_atpu_rtsm_model_layer';
+        var layRec = new GlideRecord(tableName);
+        if (layRec.isValid()) {
+            var subClassesFound = new Array(); // subclasses in layer so far
+            layRec.orderBy('sequence');
+            layRec.addQuery('active', true);
+            layRec.query();
+
+            while (layRec.next()) {
+                var layerClasses = this._calculateIncludedClasses(tableName, layRec, subClassesFound);
+             }
+        } else {
+            this.log.warn('[IRRManager] [populateClasses] - try to access non existing table ' + 'x_atpu_rtsm_model_layer');
+        }
+
+        tableName = 'x_atpu_rtsm_rtsm_domain';
+        var domRec = new GlideRecord(tableName);
+        if (domRec.isValid()) {
+            var subClassesFound = new Array(); // subclasses in doamin so far
+            domRec.orderBy('sequence');
+            domRec.addQuery('active',  true);
+            domRec.query();
+
+            while (domRec.next()) {
+                var domainClasses = this._calculateIncludedClasses(tableName, domRec, subClassesFound);
+             }
+        } else {
+            this.log.warn('[IRRManager] [populateClasses] - try to access non existing table ' + 'x_atpu_rtsm_model_layer');
+        }
+
+        this.log.debug('[IRRManager] [LEAVE populateClasses]'); 
+    },
+   
+    /**SNDOC
+    	@name _calculateIncludedClasses
+    	@description Calculate the classes included in a Layer or Domain
+        @private
+    	@param {GlideRecord(model_layer)} [layRec] - the layer or domain record
+        @param {Array(String)} [usedSubclasses] - the subclasses already claimed by other layers or domains
+        @returns {Array{Object}} the subclasses separated by connectorClasses and internalClasses  {connectorClasses: Array(String), internalClasses: Array(String)}
+    	*/
+    _calculateIncludedClasses: function (tableName, layRec, usedSubclasses) {
+        // this.log.debug('[IRRManager] [START calculateIncludedClasses]');
+        // this.log.debug('[IRRManager] tableName: ' + tableName);
+
+        var layerClasses = new Array();
+
+        layRec.setValue('classes_included', null);
+        layRec.update();
+
+        var ctlRec;
+        if (tableName == 'x_atpu_rtsm_model_layer') {
+            ctlRec = new GlideRecord('x_atpu_rtsm_class_to_layer');
+        } else {
+            ctlRec = new GlideRecord('x_atpu_rtsm_class_to_domain');
+        } 
+        var targetSubclasses = [];
+
+        if (ctlRec.isValid()) {
+            if (tableName == 'x_atpu_rtsm_model_layer') {
+                ctlRec.addQuery('model_layer', layRec.sys_id);
+            } else {
+                ctlRec.addQuery('rtsm_domain', layRec.sys_id);
+            } 
+
+            ctlRec.addQuery('active', true);
+            ctlRec.orderBy('class_name');
+            ctlRec.query();
+            while (ctlRec.next()) {
+                // this.log.debug('[IRRManager] Class: ' + ctlRec.class_name);
+                var subClasses;
+                if (tableName == 'x_atpu_rtsm_model_layer')
+                    subClasses = this._availableSubclasses(ctlRec, usedSubclasses);
+                else
+                    subClasses = this._availableSubclasses(ctlRec);
+
+                usedSubclasses = this.arrayUtil.union(usedSubclasses, subClasses);
+                targetSubclasses = layerClasses;
+
+                // subclasses not yet in layer
+                var newSubClasses = this.arrayUtil.diff(subClasses, targetSubclasses);
+ 
+                /** connectorClasses take precendence. If a class defines classes as connector and they are already member of internalClasses
+                 * the connectorClasses are removed from the internalClasses.
+                 */
+                //remove connectors classes from layer
+                newSubClasses = this.arrayUtil.diff(newSubClasses, this.connectorClasses);
+                targetSubclasses = this.arrayUtil.concat(targetSubclasses, newSubClasses);
+                targetSubclasses = this.arrayUtil.unique(targetSubclasses);
+ 
+                // this.log.debug('[IRRManager] ' + tableName + ' subClasses: ' + JSON.stringify(subClasses));
+                // this.log.debug('[IRRManager] ' + tableName + ' newSubClasses: ' + JSON.stringify(newSubClasses));
+                // this.log.debug('[IRRManager] ' + tableName + ' usedSubclasses: ' + JSON.stringify(usedSubclasses));
+                // this.log.debug('[IRRManager] ' + tableName + ' targetSubclasses: ' + JSON.stringify(targetSubclasses));
+            }
+            layRec.setValue('classes_included', JSON.stringify(targetSubclasses));
+            layRec.update();
+        } else {
+            this.log.warn('[IRRManager] [calculateIncludedClasses] - try to access non existing table ' + 'x_atpu_rtsm_class_to_layer');
+        }
+        // this.log.debug('[IRRManager] [LEAVE calculateIncludedClasses]');        
+        return layerClasses;
+    },
+
+    /**SNDOC
+        @name _availableSubclasses
+        @description Calculate the included subclasses of a class_to_layer or class_to_domain record
+        @private
+        @param {GlideRecord(class_to_layer)} [ctlRec] - the class_to_layer record
+        @param {Array(String)} [usedSubclasses] - the subclasses already claimed, e.g. by higher precedence layers
+        @returns {Object} the subclasses and the connector flag {isConnector: Boolean, subClasses: Array(String)}
+        */
+        _availableSubclasses: function (ctlRec, usedSubclasses) {
+            var tu = new TableUtil();
+            var subClasses;
+            var clazz = ctlRec.class_name;
+            var includeSubClasses = ctlRec.include_subclasses;
+            if (includeSubClasses)
+                subClasses = this.arrayUtil.convertArray(tu.subclasses(clazz));
+            else {
+                subClasses.push(clazz.toString());
+            }
+            // handle only subclasses that are not already included in other layers
+            // in case of domain assignment: suppress
+            if (!gs.nil(usedSubclasses))
+               subClasses = this.arrayUtil.diff(subClasses, usedSubclasses);
+            ctlRec.setValue('included_subclasses', JSON.stringify(subClasses));
+            ctlRec.update();
+
+            return subClasses;
+        },       
+
+    type: 'IRRManager'
+   };
+
+    /**SNDOC
+    @name resetIRR
+    @description Reset of field "classes_included" and "included_subclasses" in IRR
+    @param 
+    @returns
+    */
+    IRRManager.resetIRR = function(){
+        var clrec = new GlideRecord('x_atpu_rtsm_class_to_layer');
+        clrec.query();
+        while (clrec.next()) {
+            clrec.setValue("included_subclasses","");
+            clrec.update();
+        }
+        var cdrec = new GlideRecord('x_atpu_rtsm_class_to_domain');
+        cdrec.query();
+        while (cdrec.next()) {
+            cdrec.setValue("included_subclasses","");
+            cdrec.update();
+        }
+        var mlrec = new GlideRecord('x_atpu_rtsm_model_layer');
+        mlrec.query();
+        while (mlrec.next()) {
+            mlrec.setValue("classes_included","");
+            mlrec.update();
+        }
+        var drec = new GlideRecord('x_atpu_rtsm_rtsm_domain');
+        drec.query();
+        while (drec.next()) {
+            drec.setValue("classes_included","");
+            drec.update();
+        }
+    }]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-02-19 13:04:13</sys_created_on>
+        <sys_id>42116bab1b12605051d64261cd4bcb30</sys_id>
+        <sys_mod_count>40</sys_mod_count>
+        <sys_name>IRRManager</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_42116bab1b12605051d64261cd4bcb30</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:39:08</sys_updated_on>
+    </sys_script_include>
+</record_update>

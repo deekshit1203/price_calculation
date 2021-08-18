@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CoreCompany</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>A Company, provides a domain property</description>
+        <name>CoreCompany</name>
+        <script><![CDATA[//TODO: Keep for future use, perhaps in SSP, if we need to know the domain of a company
+/**SNDOC
+	@name CoreCompany
+	@description A Company, provides a domain property
+	@domain Configuration
+	@author ATF2SEV
+	@example var aHW = new HelloWorld()
+	@version 1.0.0
+	*/
+
+var CoreCompany = Class.create();
+CoreCompany.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CoreCompany");			
+		this.gr = '';
+		this.error = '';
+	},
+	/**SNDOC
+		@name load
+		@description load the customer from the table
+
+		@param {string} [companySysId] - sys_id of company
+		@returns {Boolean} true if success
+		*/
+	load: function (companySysId) {
+
+		this.log.info('load : Company Sys ID - ' + companySysId);
+
+		this.gr = new GlideRecord('core_company');
+		this.gr.addQuery('sys_id', companySysId);
+		this.gr.query();
+
+		if (this.gr.next()) {
+
+			this.log.info('load : Company Sys ID - ' + this.gr.sys_id);
+			return true;
+		} else {
+			this.error = "Company with sys_id [" + companySysId + "] could not be loaded from the database";
+			return false;
+		}
+	},
+	/**SNDOC
+		@name getDomain
+		@description get Domain of Company
+
+		@returns {string} sys_id of domain
+		*/
+	getDomain: function () {
+
+		this.log.info('getDomain : Company Sys ID - ' + this.gr.sys_domain);
+		return this.gr.sys_domain;
+	},
+/**SNDOC
+	@name getError
+	@description get the errormessage created during record load.
+
+	@returns {string} the error message
+	*/
+	getError: function () {
+		return this.error;
+	},
+
+
+	type: 'CoreCompany'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>81d2bed2db70cc148471a7c748961982</sys_id>
+        <sys_mod_count>14</sys_mod_count>
+        <sys_name>CoreCompany</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_81d2bed2db70cc148471a7c748961982</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 14:25:53</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorImportCustomerLeftover</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is an implementation of a CITreeSPProcessor. It is responsible for handling the cmdbImportCustomerLeftover entry on the CI Tree SP Queue. When all data calculation elements are executed, the queue entry is set to Processed with OK. Else the queue entry writes itself to the queue as State "Ready" to be re-reprocessed in the next queue run.</description>
+        <name>CITreeSPProcessorImportCustomerLeftover</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessorImportCustomerLeftover
+	@description 
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorImportCustomerLeftover = Class.create();
+CITreeSPProcessorImportCustomerLeftover.prototype = Object.extendsObject(CITreeSPProcessor, {
+	/**SNDOC
+		@name initialize
+		@description 
+		*/
+	initialize: function () {
+		CITreeSPProcessor.prototype.initialize.call(this);
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorImportCustomerLeftover");			
+		this.ops = RTSMConst.QO;
+		this.qState = RTSMConst.QueueState;	
+		this.error = "";
+	},
+	
+	//TODO: Ensure that calculateIntrinsicState is applied
+	/**SNDOC
+		@name process
+		@description 
+		*/
+	process: function () {
+		this.log.debug("[process] Start CITreeSPProcessorImportCustomerLeftover");
+
+		var ciTreeSP = new CITreeSPProcessingQueue();
+		var unprocessedEntryCount = 0;
+
+		try {
+			var custSysID = this.queueEntry.getValue("customer");
+			this.log.debug("[process] CITreeSPProcessorImportCustomerLeftover 1");
+			var grQueueEntry = ciTreeSP.getFieldOfLastEntry(this.ops.cmdbImportCustomers, "sys_created_on", null, null);
+			this.log.debug("[process] CITreeSPProcessorImportCustomerLeftover 2");
+
+			var theArray = [this.ops.disconnectCIs,  this.ops.connectCIs, this.ops.updateCIRelation, this.ops.recalcCI];
+			//var unprocessedEntryCount = ciTreeSP.getUnprocessedEntryCount(theArray, grQueueEntry.sys_created_on.toString(), custSysID);
+			//AR Change because failure in disableCustomerRTSM
+			if (grQueueEntry != null)
+				unprocessedEntryCount = ciTreeSP.getUnprocessedEntryCount(theArray, grQueueEntry.sys_created_on, custSysID);
+			if (unprocessedEntryCount == 0) {
+				this.log.info("[process] unprocessedEntryCount is 0");
+				//Set Processing Result
+				this.result.setOk();
+				this.result.validLeaves = 0;
+				this.result.uniqueCis = 0;
+			} else {
+				this.log.info("[process] unprocessedEntryCount is greater than 0");
+				this.error = "Import not finished yet." + unprocessedEntryCount + " entries to process for Customer [" + this.queueEntry.getValue("customer") + "]";
+				this.result.setErrorMessage(this.error);
+				this.result.setState(this.qState.READY);
+				this.result.validLeaves = unprocessedEntryCount;
+				this.result.deadLeaves = grQueueEntry.dead_leaves + 1;
+				this.result.uniqueCis = 0;
+			}
+		} catch (err) {
+			this.error = err.message + "\n" + err.stack;
+			this.result.setError(this.error);
+		}
+
+		this.log.debug("[process] End CITreeSPProcessorImportCustomerLeftover");
+	},
+
+	type: 'CITreeSPProcessorImportCustomerLeftover'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>366ea6b2db5a08d4da8325394896196f</sys_id>
+        <sys_mod_count>39</sys_mod_count>
+        <sys_name>CITreeSPProcessorImportCustomerLeftover</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_366ea6b2db5a08d4da8325394896196f</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-04-07 15:01:37</sys_updated_on>
+    </sys_script_include>
+</record_update>

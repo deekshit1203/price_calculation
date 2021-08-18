@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CI</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include represents a CI with some of its variables, e.g. the Customer.</description>
+        <name>CI</name>
+        <script><![CDATA[/**SNDOC
+	@name CI
+	@description Handling if EVent CMDB CI
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CI = Class.create();
+CI.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CI");
+		this.__type = "CI";	
+		this.error = "";
+	},
+
+	/**SNDOC
+		@name getError
+		@description this.error
+		@author ATF2
+		@param  {String} [] - 
+		@returns {String} this.error
+		*/
+	getError: function () {
+		return this.error;
+	},
+
+
+	/**SNDOC
+		@name deleteCI
+		@description Deletes an item from the Alert CMDB CI Relation Table
+		@author ATF2
+		@param  {String} [sys_id] - sys_id of CI to be deleted
+		@returns {String} 
+		*/
+	deleteCI: function (ciSysId) {
+		this.log.debug("[deleteCI] Start");
+		var alertCiRecord = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_ci');
+		alertCiRecord.addQuery('cmdb_ci', '=', ciSysId);
+		alertCiRecord.query();
+
+		if (alertCiRecord.next()) {
+			alertCiRecord.deleteRecord();
+			this.log.info("[deleteCI] SysID of CI that is deleted = " + ciSysId);
+		}
+
+		this.log.debug("[deleteCI] End");
+	},
+
+
+	/**SNDOC
+		@name lock
+		@description Locks an Alert CMDB CI for modifications (via DatabaseSemaphore)
+		@author ATF2
+		@param  {String} [sys_id] - sys_id of CI that should be locked for calculation
+		@param  {String} [sys_id] - sys_id of Domain the CI resides on
+		@returns {String} 
+		*/
+	lock: function (ciSysId, ciDomainSysId) {
+		this.log.debug("[lock] Start");
+		var semaphoreWaitTimeAttribute = new RTSMUtil().getProperty(RTSMConst.citreesp_semaphore_wait_time);
+				
+		this.semaphore = new DatabaseSemaphore(ciSysId, ciDomainSysId, 'CI', semaphoreWaitTimeAttribute);
+
+		this.semaphore.lock();
+		this.log.debug("[lock] End");
+	},
+
+	/**SNDOC
+		@name unlock
+		@description Unlocks an Alert CMDB CI after modifications (this.semaphore)
+		@author ATF2
+		*/
+	unlock: function () {
+		this.log.debug("[unlock] Start");
+
+		this.semaphore.unlock();
+		this.log.debug("[unlock] End");
+	},
+
+	/**SNDOC
+		@name create
+		@description Creates a new entry in the Alert CMDB CI table (x_atpu_rtsm_rtsm_cmdb_ci)
+		@author ATF2
+		@param  {String} [sys_id] - sys_id of CI to be created
+		@param  {String} [sys_id] - sys_id of Company to be set
+		@returns {Boolean} ==null->Error happened, !=null->sys-id of created or already existing record
+		*/
+	create: function (ciSysId, companySysId) {
+		this.log.debug("[CI][create] Start");
+
+		var alertCiGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_ci');
+		alertCiGR.cmdb_ci = ciSysId;
+		alertCiGR.company = companySysId;
+		var ci = new CIHelper().getCI('sys_id=' + ciSysId);
+		alertCiGR.sys_domain = ci.sys_domain;
+
+		var rec = alertCiGR.insert();
+		if (rec == null) {
+			// Set Error
+			this.error = "Insertion of new CI [" + ciSysId + "] with Company value [" + companySysId + "] to Alert CMDB CI failed.";
+			this.log.debug("[CI][create] End Error= " + this.error);
+			return null;
+		}
+
+		this.log.debug("[CI][create] End");
+		return alertCiGR.sys_id;
+	},
+
+	/**SNDOC
+		@name update
+		@description Updates the Company value of an existing entry in the Alert CMDB CI table.
+		@author ATF2
+		@param  {String} [ciSysId] - sys_id of CI to be updated
+		@param  {String} [companySysId] - sys_id of Company to be set on record
+		@returns {Boolean} true->Update was needed and successfully done; false->Updates was not needed; null->an Error happened while update
+		*/
+	update: function (ciSysId, companySysId) {
+		this.log.debug("[CI][update] Start");
+
+		var alertCiGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_ci');
+		alertCiGR.addQuery('cmdb_ci', '=', ciSysId);
+		alertCiGR.query();
+
+		if (alertCiGR.next()) {
+			// Record exists
+			if (alertCiGR.company.toString() !== companySysId) {
+				alertCiGR.company = companySysId;
+
+				var result = alertCiGR.update();
+				if (result == null) {
+					// Set Error
+					this.error = "Update of CI [" + ciSysId + "] with Company value [" + companySysId + "] to Alert CMDB CI failed.";
+					this.log.debug("[update] End Error= " + this.error);
+					return null;
+				} else {
+					this.log.debug("[update] End");
+					return true;
+				}
+			} else {
+				// Record exists but Company was Not Modified				
+				this.log.debug("[update] End");
+				return false;
+			}
+		} else {
+			// Set Error
+			this.error = "Update of CI [" + ciSysId + "] on Alert CMDB CI failed. CI is not contained in the table.";
+			this.log.debug("[CI][update] End Error= " + this.error);
+			return null;
+		}
+
+	},
+
+
+	/**SNDOC
+		@name exists
+		@description Checks whether the given sys_id of a CI from the OoB CMDB exists in the Alert CMDB CI table
+		@author ATF2
+		@param  {String} [ciSysId] - sys_id of CI to be checked for existence
+		@returns {String} !=null->sys_id of record, the given CI already exists in the Alert CMDB CI table; null->The given CI does not yet exist
+		*/
+	exists: function (ciSysId) {
+		this.log.debug("[exists] Start");
+
+		var alertCiGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_ci');
+		alertCiGR.addQuery('cmdb_ci', '=', ciSysId);
+		alertCiGR.query();
+
+		if (alertCiGR.next()) {
+			this.log.debug("[exists] End");
+			return alertCiGR.sys_id;
+		}
+
+		this.log.debug("[exists] End");
+		return null;
+	},
+
+
+	type: 'CI'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>acb503dfdbe684d024d2bb1a6896195f</sys_id>
+        <sys_mod_count>38</sys_mod_count>
+        <sys_name>CI</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_acb503dfdbe684d024d2bb1a6896195f</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-04-07 15:01:37</sys_updated_on>
+    </sys_script_include>
+</record_update>

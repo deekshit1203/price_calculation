@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="RTSM CMDB CI Relation" max_length="40" name="x_atpu_rtsm_rtsm_cmdb_rel_ci" type="collection">
+        <element label="Child" max_length="32" name="child" reference="cmdb_ci" type="reference"/>
+        <element label="Child internal Reference" max_length="32" name="child_int_ref" reference="x_atpu_rtsm_rtsm_cmdb_ci" type="reference"/>
+        <element choice="1" label="Connection Strength" max_length="40" name="connection_strength" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Always" sequence="100" value="always"/>
+                <element inactive_on_update="false" label="Cluster" sequence="200" value="cluster"/>
+            </choice>
+        </element>
+        <element label="Parent" max_length="32" name="parent" reference="cmdb_ci" type="reference"/>
+        <element label="Parent internal reference" max_length="32" name="parent_int_ref" reference="x_atpu_rtsm_rtsm_cmdb_ci" type="reference"/>
+        <element label="Percent Outage" max_length="40" name="percent_outage" type="integer"/>
+        <element label="Type" max_length="32" name="type" reference="cmdb_rel_type" type="reference"/>
+        <index name="index">
+            <element name="parent"/>
+        </index>
+        <index name="index2">
+            <element name="parent_int_ref"/>
+        </index>
+        <index name="index3">
+            <element name="type"/>
+        </index>
+        <index name="index4">
+            <element name="child_int_ref"/>
+        </index>
+        <index name="index5">
+            <element name="child"/>
+        </index>
+    </element>
+</database>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="" label="Rtsm Percent Outage Cf5d3de5db706090689c22d40596199b 61d8862ddbb06090689c" language="en" table="x_atpu_rtsm_percent_outage_cf5d3de5db706090689c22d40596199b_61d8862ddbb06090689c">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element/>
+            <help/>
+            <hint/>
+            <label>Rtsm Percent Outage Cf5d3de5db706090689c22d40596199b 61d8862ddbb06090689c</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_percent_outage_cf5d3de5db706090689c22d40596199b_61d8862ddbb06090689c</name>
+            <plural>Rtsm Percent Outage Cf5d3de5db706090689c22d40596199b 61d8862ddbb06090689cs</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:29:48</sys_created_on>
+            <sys_id>9ab255e91b427010e5f386a3604bcb09</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Rtsm Percent Outage Cf5d3de5db706090689c22d40596199b 61d8862ddbb06090689c</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_percent_outage_cf5d3de5db706090689c22d40596199b_61d8862ddbb06090689c__en</sys_update_name>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:29:48</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SubGraphVertice</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>SubGraph API:  Vertice Structure</description>
+        <name>SubGraphVertice</name>
+        <script><![CDATA[var SubGraphVertice = Class.create();
+SubGraphVertice.prototype = {
+    initialize: function(aSpace) {
+
+        this.vertice = {
+            id: "my id", // cmdb_ci.sys_id
+            idSpace: aSpace,
+            clazz: "my class", // 
+            name: "my name",   // 
+            modelLayer: "my model layer",
+            manager: "manager", // ITOM or Bridge            
+            state:  { // Source Tables: [x_atpu_rtsm_ci_tree_state_persistency] AND [em_impact_status]
+                id: "my state table id ",
+                source: "my state table",
+                intrinsicState: 5,//default: Ok
+                potentialState: 5,//default: Ok
+                upstreamState: 5//default: Ok
+            },
+            props: { }// properties from [cmdb_ci]
+        };
+        this.info = {
+            isService: -1,       // only for ITOM em_graph.is_service: 1=Service, 0=no Service
+            isCluster: -1,      // only for Bridge x_atpu_rtsm_ci_tree_state_persistency.is_cluster: 1=Cluster, 0=no Cluster
+            isRootCI: -1,       // Bridge: = x_atpu_rtsm_ci_tree_state_persistency.is_root_ci, ITOM: = isService
+            isConnectorCI: 0   // 1 Connector Class, 0 No Connector Class
+        };
+    },
+    type: 'SubGraphVertice'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-20 14:42:38</sys_created_on>
+        <sys_id>5df6300bdb63a450689c22d405961979</sys_id>
+        <sys_mod_count>23</sys_mod_count>
+        <sys_name>SubGraphVertice</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_5df6300bdb63a450689c22d405961979</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-28 15:04:14</sys_updated_on>
+    </sys_script_include>
+</record_update>

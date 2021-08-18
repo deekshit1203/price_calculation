@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorDataChangeDetection</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is an implementation of a CITreeSPProcessor. It is responsible for the Change Detection of the newly imported CI data (CI Relations) compared to the existing CI data on the model. For any change detected a new entry on the CI Tree SP Queue is created.</description>
+        <name>CITreeSPProcessorDataChangeDetection</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessorDataChangeDetection
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorDataChangeDetection = Class.create();
+CITreeSPProcessorDataChangeDetection.prototype = Object.extendsObject(CITreeSPProcessor, {
+	initialize: function () {
+		CITreeSPProcessor.prototype.initialize.call(this);
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorDataChangeDetection");
+
+		//Number of CI Relations that have been removed from the model
+		this.removedCIRelationsCount = 0;
+
+		//Number of CI Relations that have been added to the model
+		this.addedCIRelationsCount = 0;
+
+		//Number of CI Relations that have been updated on the model (e.g. Percent Outage, Connection Strength)
+		this.updatedCIRelationsCount = 0;
+
+		//Used by function triggerCIRelation to note how many CI Relations were really triggered
+		this.triggered = 0;
+
+		this.error = "";
+	},
+	/**SNDOC
+		@name process
+		@description  Processes a request in the CI Tree SP Queue of Type "cmdbChangeDetectionCustomer"
+		*/
+	process: function () {
+		this.log.debug("[process] Start");
+		var newCIRelations;
+		this.factory = new SerializerFactory();
+		this.filler = new FunnelFiller();
+		var dataType = new CIRelationManager().getObjectType();
+
+		try {
+			var custSysID = this.queueEntry.getValue("customer");
+
+			//Create a Serializer object using the SerializerFactory
+			var serializerObject = this.factory.createSerializer(RTSMConst.QO.cmdbChangeDetectionCustomer, dataType, custSysID);
+			newCIRelations = serializerObject.deserialize();
+
+			if (newCIRelations === null) {
+				//De-serialization was NOT successful, Get Error from serializer object
+				this.error = serializerObject.error;
+				this.setError(this.error); //Set Processing Result
+			} else {
+
+				//De-serialization was successful
+				this.log.info("[process] De-serialization was successful");
+				this.currentCIRelations = new CMDBCIRelation().createCIRelationManager(custSysID);
+				this.currentCIRelations.cleanForSerialization();
+				this.log.info("[process] Customer = " + custSysID + ", currentCIRelations =  " + JSON.stringify(this.currentCIRelations));
+
+				this.log.logObject(newCIRelations, "newCIRelations");
+				this.log.logObject(this.currentCIRelations, "this.currentCIRelations");
+
+				this.currentCIRelations.detectChanges(newCIRelations);
+				this.log.info("[process] after this.currentCIRelations.detectChanges");
+
+				this.ret = this.triggerDataCalculation();
+				this.log.info("[process] after this.triggerDataCalculation");	
+
+				if (this.ret === false) {
+					//Trigger was NOT successful
+					this.setError(this.error); //Set Processing Result
+				} else {
+					//Trigger was successful
+					this.result.setOk();
+					this.log.info("[process] Processing Result - OK");
+				}
+			}
+
+			//Element of type "cmdbImportCustomerLeftover" is created on the queue
+			this.ret = this.filler.insert(RTSMConst.QO.cmdbImportCustomerLeftover, custSysID);
+			if (this.ret === false) {
+				//FunnelFiller was NOT successful, Set ERROR on Processing Result
+				this.error = this.error + "\nNumber of cmdbImportCustomerLeftover entries will not match Customer to be imported from Last cmdbImportCustomers entry. A manual fix of the situation has to be done. Error from Funnel Filler: " + this.filler.error;
+				this.setError(this.error);
+			}
+
+			this.log.info("[process] addedCIRelationsCount = " + this.addedCIRelationsCount + ", removedCIRelationsCount = " + this.removedCIRelationsCount + ", updatedCIRelationsCount = " + this.updatedCIRelationsCount);
+			//FunnelFiller was successful
+			this.result.validLeaves = this.addedCIRelationsCount;
+			this.result.deadLeaves = this.removedCIRelationsCount;
+			this.result.uniqueCis = this.updatedCIRelationsCount;
+		} catch (err) {
+			this.error = err.message + "\n" + err.stack;
+			this.result.setError(this.error);
+		}
+
+		this.log.debug("[process] End");
+	},
+	/**SNDOC
+		@name triggerDataCalculation
+		@description  Triggers a data calculation for each detected change of type disconnectCIs, connectCIs, updatePercentOutage and updateConnectionStrength.
+		@returns {Boolean} true -> Trigger was successful false -> Trigger was NOT successful
+		*/
+	triggerDataCalculation: function () {
+		this.log.debug("[triggerDataCalculation] Start");
+
+		//Deleted CI Relations
+		this.ciRelationsHash = this.currentCIRelations.getDeletedCIRelations();
+		this.ret = this.triggerCIRelation(RTSMConst.QO.disconnectCIs, this.ciRelationsHash);
+		this.removedCIRelationsCount = this.triggered;
+		if (this.ret === false) {
+			//Trigger was NOT successful
+			this.log.debug("[triggerDataCalculation] End");
+			return false;
+		}
+		this.log.info("[triggerDataCalculation] Removed CI Relations Count = " + this.triggered);
+
+		//Added CI Relations
+		this.ciRelationsHash = this.currentCIRelations.getAddedCIRelations();
+		this.ret = this.triggerCIRelation(RTSMConst.QO.connectCIs, this.ciRelationsHash);
+		this.addedCIRelationsCount = this.triggered;
+		if (this.ret === false) {
+			//Trigger was NOT successful
+			this.log.debug("[triggerDataCalculation] End");
+			return false;
+		}
+		this.log.info("[triggerDataCalculation] Added CI Relations Count = " + this.triggered);
+
+		//Modified Percent Outage CI Relations
+		this.updatePercentOutageHash = this.currentCIRelations.getModifiedPercentCIRelations();
+
+		//Modified Connection Strength CI Relations
+		this.updateConnectionStrengthHash = this.currentCIRelations.getModifiedStrengthCIRelations();
+
+		for (var key in this.updateConnectionStrengthHash) {
+			this.updatePercentOutageHash[key] = this.updateConnectionStrengthHash[key];
+		}
+
+		this.ciRelationsHash = this.updatePercentOutageHash;
+		this.ret = this.triggerCIRelation(RTSMConst.QO.updateCIRelation, this.ciRelationsHash);
+		this.updatedCIRelationsCount = this.triggered;
+
+		if (this.ret === false) {
+			//Trigger was NOT successful
+			this.log.debug("[triggerDataCalculation] End");
+			return false;
+		}
+		this.log.info("[triggerDataCalculation] Updated CI Relations Count= " + this.updatedCIRelationsCount);
+
+		//Modified Company CI Relations
+		this.ciRelationsHash = this.currentCIRelations.getModifiedCompanyCIRelations();
+		this.ret = this.triggerCIRelation(RTSMConst.QO.connectCIs, this.ciRelationsHash);
+		this.updatedCIRelationsCount = this.updatedCIRelationsCount + this.triggered;
+
+		if (this.ret === false) {
+			//Trigger was NOT successful
+			this.log.debug("[triggerDataCalculation] End");
+			return false;
+		}
+
+		this.log.info("[triggerDataCalculation] Updated CI Relations Count from getModifiedCompanyCIRelations = " + this.updatedCIRelationsCount);
+
+		this.log.debug("[triggerDataCalculation] End");
+		return true;
+	},
+	/**SNDOC
+		@name triggerCIRelation
+		@description  Creates the CI Tree SP Queue elements for each of the passed CIRelations
+		@param {String} [operation] - Operation to be executed, e.g. disconnectCIs
+		@param {Hash} [ciRelationsHash] - Hash object containing CIRelation objects in scope of trigger
+		@returns {Boolean} true->trigger was successful, false->Error while trigger
+		*/
+	triggerCIRelation: function (operation, ciRelationsHash) {
+		this.log.debug("[triggerCIRelation] Start");
+		var customerSysId;
+		var queueDataSysId;
+		//Set member "triggered" to 0
+		this.triggered = 0;
+
+		var ciRelHashKeys = Object.keys(ciRelationsHash);
+		if (ciRelHashKeys.length > 0) {
+			//Get value for the first Key from Param2
+			var ciRelationObj = ciRelationsHash[Object.keys(ciRelationsHash)[0]];
+			//Create a Serializer object using the SerializerFactory
+			var serializerObject = this.factory.createSerializer(operation, ciRelationObj.getObjectType(), this.currentCIRelations.customer);
+
+			for (var i = 0; i < ciRelHashKeys.length; i++) {
+				//Next CI Relation available?
+				var serializeSuccess = serializerObject.serialize(ciRelationsHash[ciRelHashKeys[i]]);
+				if (serializeSuccess === false) {
+					//Serialization was NOT successful
+					this.error = serializerObject.error;
+					this.log.debug("[triggerCIRelation] End");
+					return false;
+				}
+
+				customerSysId = this.currentCIRelations.customer;
+				queueDataSysId = serializerObject.getFirstQueueData();
+				//Element of type Param1 is created on the queue
+				this.filler.insert(operation, {
+					customer: customerSysId,
+					queueData: queueDataSysId
+				});
+
+				this.triggered++;
+			}
+		}
+		this.log.debug("[triggerCIRelation] End");
+		return true;
+	},
+
+	type: 'CITreeSPProcessorDataChangeDetection'
+
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>5aa134addb398c10da83253948961965</sys_id>
+        <sys_mod_count>89</sys_mod_count>
+        <sys_name>CITreeSPProcessorDataChangeDetection</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_5aa134addb398c10da83253948961965</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-18 09:54:16</sys_updated_on>
+    </sys_script_include>
+</record_update>

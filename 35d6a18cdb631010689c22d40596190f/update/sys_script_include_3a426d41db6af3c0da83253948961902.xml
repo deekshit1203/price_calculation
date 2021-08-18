@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SerializerCIRelationManager</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for the serialization and deserialization of the CIRelationManager class.</description>
+        <name>SerializerCIRelationManager</name>
+        <script><![CDATA[/**SNDOC
+	@name SerializerCIRelationManager
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var SerializerCIRelationManager = Class.create();
+SerializerCIRelationManager.prototype = Object.extendsObject(Serializer, {
+	/**SNDOC
+	 @name initialize
+	 @description
+	 @param {String} [queueType]
+	 @param {String} [dataType]
+	 @param {String} [customerSysId] - sys_id of customer
+	 */
+	initialize: function (queueType, dataType, customerSysId) {
+		Serializer.prototype.initialize.call(this, queueType, dataType, customerSysId);
+
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SerializerCIRelationManager");		
+
+	},
+	/**SNDOC
+	 @name serialize
+	 @description Put all chunks of ci relation data of the ciRelManToSerialize into CITreeSPProcessingQueueData  
+	 @param {CIRelationManager} [ciRelManToSerialize]
+	 @returns {Boolean} true if success
+	 */
+	serialize: function (ciRelManToSerialize) {
+		this.log.debug("[serialize CI RelationManager] Start");
+
+		var qd = new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer);
+		var getSerializedData;
+
+		//Deleting old data here
+		this.deleteOldData();
+		this.log.info('serialize : Deleting data ');
+
+		//Setting first queue data to null
+		this.firstQueueData = null;
+
+		//Get max data size
+		var maxDataSize = qd.getMaxDataSize();
+		this.log.info('serialize : Max data ' + maxDataSize);
+
+		//Resetting the serialized data
+		ciRelManToSerialize.resetSerializable();
+		this.log.info('serialize : Resetting serialised data ');
+
+		do {
+
+			//Serialized the data
+			getSerializedData = ciRelManToSerialize.getSerializable(maxDataSize, this);
+			//this.log.info('serialize : Getting Keys from serialised data ' + Object.keys(getSerializedData.serializable));
+			this.log.info('serialize : More Data ' + getSerializedData.moreData);
+
+			var serializeData = JSON.stringify(getSerializedData.serializable);
+			this.log.info('serialize : JSON stringified Data ' + serializeData);
+
+			//Inserting serialized data
+			var insertedData = qd.insertData(serializeData);
+			this.log.info('serialize : Data inserted ' + insertedData);
+
+			if (insertedData === null) {
+				this.error = "Insertion of entry into Processing Queue Data table failed for queue type " + this.queueType + ", data type " + this.dataType + ", customer " + this.customer;
+				this.log.error('serialize : Error occured. ' + this.error);
+				return false;
+			}
+		} while (getSerializedData.moreData === true);
+
+		//Setting the first data to member variable 
+		this.firstQueueData = qd.getFirstInsertedData();
+		
+		this.log.debug("[serialize CI RelationManager] End");
+		return true;
+
+	},
+
+	/**SNDOC
+		@name deserialize
+		@description Return deserialized ci relation data from  CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer).
+		@author ATF2
+		@returns {returnCIRelMan|null} - all chunks of ci relation data combined.
+		*/
+	deserialize: function () {
+		this.log.debug("[deserialize CI RelationManager] Start");
+		//Create temporary 'CIRelationManager' Object
+		var returnCIRelMan = new CIRelationManager();
+		var tempCIRelMan;
+		var data;
+		var dataWasAvailable = false;
+
+		//Set Customer to return CIRelMan
+		returnCIRelMan.customer = this.customer;
+
+		var queueData = new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer);
+
+		do {
+			data = queueData.getData();
+
+			this.log.info("deserialize : data=" + data.data);
+
+			if (data.data != null) {
+				dataWasAvailable = true;
+
+				this.log.info("deserialize : More Data " + data.moreData + " getData : Data " + data.data);
+				tempCIRelMan = JSON.parse(data.data, this._revive);
+				this.log.info('JSON parsed data completed: ' + tempCIRelMan.__type + ', Keys are: ' + Object.keys(tempCIRelMan.cis));
+
+				returnCIRelMan.insertParentChildHolders(tempCIRelMan);
+			}
+		} while (data.moreData === true);
+
+		if (dataWasAvailable === true) {
+			this.log.debug("[deserialize CI RelationManager] End");
+			return returnCIRelMan;
+		} else {
+			this.error = "No data of queue type " + this.queueType + ", data type " + this.dataType + ", customer " + this.customer + " was available on the Queue Data table.";
+			this.log.error('deserialize : Error occured. ' + this.error);
+			return null;
+		}
+
+	},
+
+	/**SNDOC
+	 @name _revive
+	 @description convert serial data into an object
+	 @private
+	 @param {String} [key] - key of the deserializer, used for logging only
+	 @param {CIRelationManager|CIRelation|any} [val] - an object to be iniztialized from the serialized data
+	 @returns {CIRelationManager|CIRelation|any} - the object revived from the serial data
+	 */
+	_revive: function (key, val) {
+		var log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SerializerCIRelationManager");				
+
+		// log.info('_revive: Entered Revive function , val type is: ' + typeof (val) + ', val is: ' + val);
+
+
+		if (typeof (val) === 'object' && val.__type === 'CIRelationManager') {
+			// log.info(' _revive : Entering the IF condition ');
+			// log.info("deserializer CIRelationManager key: [" + key + "] val: [" + val + "] ser: " + JSON.stringify(val));
+
+			var ciRelMan = new CIRelationManager();
+			ciRelMan.initFromCIRelationManager(val);
+			return ciRelMan;
+		} else if (typeof (val) === 'object' && val.__type === 'CIRelation') {
+			// log.info("deserializer CIRelation key: [" + key + "] val: " + val + "]");
+
+			var ciRelation = new CIRelation();
+			ciRelation.initFromCIRelation(val);
+			//TODO AR added 2021-01-19 from Gayatri
+			ciRelation.cleanForSerialization(); 			
+			return ciRelation;
+		} else {
+			// log.info("_revive: deserializer key: " + key + " val: " + val);
+			return val;
+		}
+
+		log.info('Revive completed ');
+	},
+	/**SNDOC
+	 @name estimateSerializedSize
+	 @description Calculate the expected size of serialized data
+	 @param {String} [param1] - one of {ParentChildHolder, CIRelationManagerEnvelope}
+	 
+	 //TODO: understand param2
+	 @param {*} [param2] - used if param1 == "ParentChildHolder". 
+	 @returns {Number} calculatedSize
+	 */
+	estimateSerializedSize: function (param1, param2) {
+		this.log.info("estimateSerializedSize: into the estimateSerializedSize");
+
+		var calculateSize;
+
+		if (param1 == 'ParentChildHolder') {
+
+			//Get Child Entries
+			var childEntriesObj = param2.child;
+			var childEntries = Object.keys(childEntriesObj).length;
+
+			this.log.info("estimateSerializedSize: Child entries length is " + childEntries);
+
+			//Get Parent Entries
+			var parentEntriesObj = param2.parent;
+			var parentEntries = Object.keys(parentEntriesObj).length;
+			this.log.info("estimateSerializedSize: Parent entries length is " + parentEntries);
+
+			//Calculating the size
+			calculateSize = (38 * 1012) * (childEntries + parentEntries) + 59;
+			this.log.info("estimateSerializedSize: Calculated size of param1 - ParentChildHolder is " + calculateSize);
+		} else if (param1 == 'CIRelationManagerEnvelope') {
+			calculateSize = 51;
+			this.log.info("estimateSerializedSize: Calculated size of param2 - CIRelationManagerEnvelope is " + calculateSize);
+		} else {
+			return -1;
+		}
+		return calculateSize;
+	},
+
+	type: 'SerializerCIRelationManager'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>3a426d41db6af3c0da83253948961902</sys_id>
+        <sys_mod_count>131</sys_mod_count>
+        <sys_name>SerializerCIRelationManager</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_3a426d41db6af3c0da83253948961902</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-19 05:57:38</sys_updated_on>
+    </sys_script_include>
+</record_update>

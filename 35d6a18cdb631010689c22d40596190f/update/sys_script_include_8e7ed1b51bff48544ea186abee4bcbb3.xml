@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorConnectCIs</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include processes the Queue operation "connectCIs". The Script Include is extended from the SI "CITreeSPProcessor"</description>
+        <name>CITreeSPProcessorConnectCIs</name>
+        <script><![CDATA[	/**SNDOC
+	@name CITreeSPProcessorConnectCIs
+	@description Process a request in the CI Tree SP Queue of Type "connectCIs"
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+	var CITreeSPProcessorConnectCIs = Class.create();
+	CITreeSPProcessorConnectCIs.prototype = Object.extendsObject(CITreeSPProcessor, {
+		/**SNDOC
+		@name initialize
+		@description 
+		*/
+		initialize: function () {
+			CITreeSPProcessor.prototype.initialize.call(this);
+
+			this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorConnectCIs");				
+		},
+		/**SNDOC
+		@name process
+		@description  Process a request in the CI Tree SP Queue of Type "connectCIs"
+		*/
+		process: function () {
+			this.log.debug("[process] Start");
+			var ciRelObj;
+			var factory = new SerializerFactory();
+			var cmdbCiRelation = new CMDBCIRelation();
+			var dataType = new CIRelation().getObjectType();
+
+			try {
+				var custSysID = this.queueEntry.getValue("customer");
+
+				//Create a Serializer object using the SerializerFactory
+				var serializerObject = factory.createSerializer(RTSMConst.QO.connectCIs, dataType, custSysID);
+				ciRelObj = serializerObject.deserialize(this.queueEntry.getValue("queue_data"));
+
+				if (ciRelObj === null) {
+					//De-serialization was NOT successful, Set Processing Result to error
+					this.error = "Deserialization of Queue Data (" + this.queueEntry.getValue("queue_data") + ") of queue entry [" + this.queueEntry.getValue("sys_id") + "] failed.";
+					this.setError(this.error);
+					this.log.debug("[process] End Error= " + this.error);
+					return;
+				}
+				this.log.info("[process] De-serialization was successful");
+				//De-serialization was successful
+				cmdbCiRelation.lock(ciRelObj);
+				var ret = cmdbCiRelation.addCIRelation(ciRelObj);
+				cmdbCiRelation.unlock();
+
+				if (ret === true) {
+					//CI Relation was added to the model
+					this.log.info("[process] CI Relation was added to the model");
+
+					this.triggerRecalcCI(ciRelObj.child.sys_id, ciRelObj);
+					this.result.setOk();
+					this.result.validLeaves = 1;
+					this.result.deadLeaves = 0;
+					this.result.uniqueCis = 0;
+					this.log.debug("[process] End");
+					return;
+				} else if (ret === false) {
+					this.log.error("[process] De-serialization was successful but addition of CI Relation, Parent [" + ciRelObj.parent.sys_id + "] and Child [" + ciRelObj.child.sys_id + "] returned false");
+					this.result.setOk();
+					this.result.validLeaves = 0;
+					this.result.deadLeaves = 0;
+					this.result.uniqueCis = 0;
+					this.log.debug("[process] End");
+					return;
+				} else {
+					// Set Processing result to error
+					this.error = "Error while processing connectCIs in adding the CI Relation : " + cmdbCiRelation.getError();
+					this.setError(this.error);
+				}
+
+			} catch (err) {
+				this.error = err.message + "\n" + err.stack;
+				this.result.setError(this.error);
+			}
+
+			this.log.debug("[process] End");
+		},
+
+		type: 'CITreeSPProcessorConnectCIs'
+	});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>8e7ed1b51bff48544ea186abee4bcbb3</sys_id>
+        <sys_mod_count>22</sys_mod_count>
+        <sys_name>CITreeSPProcessorConnectCIs</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_8e7ed1b51bff48544ea186abee4bcbb3</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-05-07 07:06:15</sys_updated_on>
+    </sys_script_include>
+</record_update>

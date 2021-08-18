@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SubGraphEdge</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>SubGraph API: Edge Structure</description>
+        <name>SubGraphEdge</name>
+        <script><![CDATA[var SubGraphEdge = Class.create();
+SubGraphEdge.prototype = {
+    initialize: function(aSpace) {
+        this.edge = {
+            from: "3b5ef395dbddf700a0c18a3a48961980",
+            idSpaceFrom: aSpace,
+            to: "3b5ef395dbddf700a0c18a3a48961980",
+            idSpaceTo: aSpace,
+            relationType: "Uses:Used by",
+            percentOutage: 50,
+            strength: "always",
+            isLoop: 0,       // Loop Detection: 1=Loop, 0=no Loop
+            props: {}         // fields from x_atpu_rtsm_rtsm_cmdb_rel_ci
+        };
+        // Helper Properties, defined by usage
+        // *** the child is the vertice in the impact tree !!! ***
+        this.help = {
+            // elementGraphNodeKey: "",
+            // parentGraphVtxKey: "",
+            targetVtxKey: "",
+            sourceVtxKey: ""
+        };
+     },
+
+    type: 'SubGraphEdge'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-29 10:44:52</sys_created_on>
+        <sys_id>19e61639db732010689c22d405961982</sys_id>
+        <sys_mod_count>15</sys_mod_count>
+        <sys_name>SubGraphEdge</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_19e61639db732010689c22d405961982</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-07-01 10:16:55</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script><![CDATA[var selCustList = [];
+var selCustSysIds = [];
+var j = 0;
+var k = 0;
+var selCustLen = 0;
+var sysIDArr = null;
+
+//OK button is by default disabled
+document.getElementById("ok_button").disabled = true;
+
+//Get the selected list of Customers from UI.
+function selectCustomers(elem) {
+		if (elem.checked == true) {
+	    document.getElementById("ok_button").disabled = false;
+		selCustList.push(elem.name);
+	} else {
+	  	selCustList.splice(selCustList.indexOf(elem.name), 1);
+	}
+}
+
+//Pass the selected customer names to function - 'clickOkToProcessCustomerSPRecalc'.
+function clickOkToProcessCustomerSPRecalc() {
+	var reqCount = 0;
+	
+	//retrive customer sys_id to trigger recalculate
+	selCustLen = selCustList.length;
+	var jsonObj = '${JS:sysparm_jsonObjArr}'.evalJSON();
+		len = jsonObj.length;
+		while(j<selCustLen) {
+			for (var key in jsonObj) {
+				if(selCustList[j] == jsonObj[key].name) {
+				   selCustSysIds.push(jsonObj[key].sysID);
+				}
+			}
+			j++;
+		}
+		sysIDArr = JSON.stringify(selCustSysIds);
+		
+		reqCount = selCustLen;
+		
+		//Exit the script if there are no SP customers selected from UI.
+		if(!reqCount) {
+			document.getElementById("ok_button").disabled = true;
+			exit();
+		}
+		//AJAX Call - to send the sysId list of selected customers for CI Tree SP recalculation.
+		var ga =  new GlideAjax('AJAX');
+		ga.addParam('sysparm_name','ciTreeSPRecalcCustomers');
+		ga.addParam('sysparm_custSysIdList',sysIDArr);
+		ga.getXML(ParseCITreeSPRecalcCustomers);
+		
+		function ParseCITreeSPRecalcCustomers(response) {
+			
+			GlideModal.get().destroy();
+			
+			var answer = response.responseXML.documentElement.getAttribute('answer');
+			var validCount = answer;
+			var dialogClass = typeof GlideModal != 'undefined' ? GlideModal : GlideDialogWindow;
+			dlg = new dialogClass('TriggerCITreeSPRecalculateCustomersPage',true);
+			dlg.setPreference("sysparm_validCount",validCount);
+			dlg.setPreference("sysparm_reqCount",reqCount);
+			dlg.setSize(400,800);
+			dlg.render();
+		}
+	}
+	
+	function onCancel() {
+		GlideModal.get().destroy();
+		reloadWindow(window);
+	}]]></client_script>
+        <description>Processing Dialog for Recalculate CITreeSP Customers.</description>
+        <direct>false</direct>
+        <endpoint>x_atpu_rtsm_ProcessCITreeSPRecalculateCustomersPage.do</endpoint>
+        <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+<g:ui_form>
+
+
+<j:set var="jvar_custstring" value="${sysparm_spcustomers}"/>
+
+<g:evaluate var="jvar_jsonObj" jelly="true" object="true">
+
+var Array1 = jelly.jvar_custstring.toString().split(',');
+
+var arr = [];
+
+for(var i=0;i&lt;Array1.length;i++){
+var obj = {};
+obj['array1'] = Array1[i];					  
+arr.push(obj);								  	  
+}
+arr;
+
+</g:evaluate>
+	
+	<table border="0" cellspacing="0" cellpadding="0" class="layout_outer" width="100%" height="400%">
+		<tr>
+			<td>Please select the customers to recalculate</td>			
+		</tr>
+		</table>
+	  <table>
+		<tr>
+			<td height="400%" width="10%" style="vertical-align:left" align="left"> </td>
+			<td height="400%" width="10%" style="vertical-align:left" align="left"> </td>
+			<td height="400%" width="40%" style="vertical-align:middle" align="left"><b>Customer</b></td>	
+			<td height="400%" width="10%" style="vertical-align:middle" align="middle"></td>
+		</tr>
+	<j:forEach items="${jvar_jsonObj}" var="jvar_json">
+		<tr id = "process_citreesp">
+												
+				<td height="400%" width="10%" style="vertical-align:left" align="left"> 
+					<input type="checkbox" id="${jvar_spcustomers_id}" name="${jvar_json.array1}" onclick="selectCustomers(this)"/> 
+			    </td>
+			   <td height="400%" width="10%" style="vertical-align:left" align="left"></td>
+										
+											<td height="400%" width="40%" style="vertical-align:middle;color:blue" align="left"><label> ${jvar_json.array1} </label></td>
+			   <td height="400%" width="10%" style="vertical-align:middle" align="middle"></td>
+											<td height="400%" width="40%" style="vertical-align:middle;color:blue" align="left"><label> ${jvar_json.array2} </label> </td>
+																						
+						
+		</tr>
+		</j:forEach>
+	</table>	
+	
+		<g:dialog_buttons_ok_cancel ok="return clickOkToProcessCustomerSPRecalc();" cancel="return onCancel();" ok_type="button" ok_id="ok_button" cancel_type="button"/>
+
+</g:ui_form>
+</j:jelly>]]></html>
+        <name>ProcessCITreeSPRecalculateCustomersPage</name>
+        <processing_script/>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-01-19 13:20:10</sys_created_on>
+        <sys_id>1d4b3ba9dbb52050689c22d405961954</sys_id>
+        <sys_mod_count>4</sys_mod_count>
+        <sys_name>ProcessCITreeSPRecalculateCustomersPage</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_ui_page_1d4b3ba9dbb52050689c22d405961954</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-03-25 14:11:16</sys_updated_on>
+    </sys_ui_page>
+</record_update>

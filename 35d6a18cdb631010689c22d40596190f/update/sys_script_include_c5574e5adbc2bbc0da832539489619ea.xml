@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CIRelation</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates a CI Tree SP CMDB CI Relation. </description>
+        <name>CIRelation</name>
+        <script><![CDATA[/**SNDOC
+	@name CIRelation
+	@description A CI relation with connection strength
+	@domain Impact Tree
+	@author ATF2SEV
+	@version 1.0.0
+	@sideeffect example: to class xyz
+	@see example: https://developer.servicenow.com/
+		
+	*/
+var CIRelation = Class.create();
+CIRelation.prototype = {
+	initialize: function () {
+		//TODO AR 2021-01-15 In ATF2 Logging is commented out because cleanForSerialization is never called
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelation");
+		
+		this.parent = {
+			"sys_id": "",
+			"sys_class_name": "",
+			"company": "",
+			"operational_status": 0,
+			"is_connector": false
+		};
+
+		this.child = {
+			"sys_id": "",
+			"sys_class_name": "",
+			"company": "",
+			"operational_status": 0,
+			"is_connector": false			
+		};
+
+		this.type = {
+			"sys_id": "",
+			"name": "",
+		};
+
+		this.connection_strength = "";
+		this.percent_outage = 0;
+
+		this.__type = "CIRelation";		
+	},
+
+	/**SNDOC
+		@name cleanForSerialization
+		@description Prepare for serialization
+		@version 1.0.1		
+		@author ATF2		
+		@sideeffect example: not to cleanForSerialization
+		@see example: https://cleanForSerialization.de
+		*/
+	cleanForSerialization: function () {
+		delete this["log"];
+
+	},
+
+	/**SNDOC
+		@name getObjectType
+		@description Getter for internal object type "CIRelation"
+		@author ATF2
+		@param  {String} [] - 
+		@returns {String} Type Used by deserialization
+		*/
+	getObjectType: function () {
+		return this.__type;
+	},
+
+	/**SNDOC
+		@name initFromCMDBRelCI
+		@description Initialize the CI Relation Object from OOB table cmdb_rel_ci. Uses getValue() on the properties.
+		@author ATF2
+		@param  {cmdb_rel_ci} [ciRelObjToInitFrom] - GlideRecord holding a CI Relation from table cmdb_rel_ci
+		@param  {Boolean} [childIsConnector] - Child is a Connector CI
+		*/
+	initFromCMDBRelCI: function (ciRelObjToInitFrom, childIsConnector) {
+		this.log.debug("[initFromCMDBRelCI] Start");
+
+		//TODO AR 2021-02-14 overwork all similar for use in scoped app
+		// ATF2 Version
+		// Evaluator: com.glide.script.fencing.MethodNotAllowedException: Function getValue is not allowed in scope x_atpu_rtsm
+		//this.parent.sys_id = ciRelObjToInitFrom.parent.getValue();
+
+		// Scoped Version sind 2020-11-24
+		// No exception but this.parent.sys = ""
+		// this.parent.sys_id = ciRelObjToInitFrom.parent;
+
+		// This works - but what is the right solution?
+		// this.parent.sys_id = ciRelObjToInitFrom.parent.toString();
+		// another possibility
+		// this.parent.sys_id = ciRelationGR.getValue("parent");
+
+		this.parent.sys_id = ciRelObjToInitFrom.parent.toString();
+		this.parent.sys_class_name = ciRelObjToInitFrom.parent.sys_class_name.toString();
+		this.parent.company = ciRelObjToInitFrom.parent.company.toString();
+		this.parent.operational_status = parseInt(ciRelObjToInitFrom.parent.operational_status);
+
+		this.child.sys_id = ciRelObjToInitFrom.child.toString();
+		this.child.sys_class_name = ciRelObjToInitFrom.child.sys_class_name.toString();
+		this.child.company = ciRelObjToInitFrom.child.company.toString();
+		this.child.operational_status = parseInt(ciRelObjToInitFrom.child.operational_status);
+		this.child.is_connector = childIsConnector;
+
+		// this.parent.sys_id = ciRelObjToInitFrom.parent.getValue('sys_id');
+		// this.parent.sys_class_name = ciRelObjToInitFrom.parent.getValue('sys_class_name');
+		// this.parent.company = ciRelObjToInitFrom.parent.getValue('company');
+		// this.parent.operational_status = parseInt(ciRelObjToInitFrom.parent.operational_status);
+
+		// this.child.sys_id = ciRelObjToInitFrom.child.getValue('sys_id');
+		// this.child.sys_class_name = ciRelObjToInitFrom.child.getValue('sys_class_name');
+		// this.child.company = ciRelObjToInitFrom.child.getValue('company');
+		// this.child.operational_status = parseInt(ciRelObjToInitFrom.child.operational_status);
+
+		this.type.sys_id = ciRelObjToInitFrom.type.toString();
+		this.type.name = ciRelObjToInitFrom.type.parent_descriptor + "::" + ciRelObjToInitFrom.type.child_descriptor;
+		//this.connection_strength = ciRelObjToInitFrom.connection_strength;
+		this.connection_strength = ciRelObjToInitFrom.connection_strength.toString();
+
+        if (ciRelObjToInitFrom.percent_outage != null) {
+            this.percent_outage = parseInt(ciRelObjToInitFrom.percent_outage);
+        }			
+		// this.log.debug("[initFromCMDBRelCI] this.percent_outage: " + this.percent_outage);
+
+		this.log.debug("[initFromCMDBRelCI] End");		
+	},
+	
+	initFromSubPGraph: function (parentVertice, childVertice, edge) {
+		this.log.debug("[initFromSubPGraph] Start");
+
+		this.parent.sys_id = parentVertice.id;
+		this.parent.sys_class_name = parentVertice.clazz;
+
+		this.child.sys_id = childVertice.id;
+		this.child.sys_class_name = childVertice.clazz;
+
+		this.type.sys_id = edge.props.sys_id;
+		this.type.name = edge.relationType;
+		this.connection_strength = edge.strength;
+
+        if (edge.percentOutage) {
+            this.percent_outage = parseInt(edge.percentOutage, 10);
+        }
+
+		this.log.debug("[initFromSubPGraph] End");		
+	},
+
+	/**SNDOC
+		@name initFromCIRelation
+		@description to initialize from a relation object. Does not use getValue() on properties.
+		@author ATF2
+		@param  {Object} [ciRelObjToInitFrom] - 
+		@returns {String} 
+		*/
+	initFromCIRelation: function (ciRelObjToInitFrom) {
+		this.log.debug("[initFromCIRelation] Start");
+
+		if (!ciRelObjToInitFrom.parent.sys_id) {
+			this.parent.sys_id = ''; // Parent CI was deleted from 'cmdb_ci'
+		} else {
+			this.parent.sys_id = ciRelObjToInitFrom.parent.sys_id.toString();
+		}
+
+		this.parent.sys_class_name = ciRelObjToInitFrom.parent.sys_class_name.toString();
+		this.parent.company = ciRelObjToInitFrom.parent.company.toString();
+		this.parent.operational_status = ciRelObjToInitFrom.parent.operational_status;
+
+		if (!ciRelObjToInitFrom.child.sys_id) {
+			this.child.sys_id = ''; // Child CI was deleted from 'cmdb_ci'
+		} else {
+			this.child.sys_id = ciRelObjToInitFrom.child.sys_id.toString();
+		}
+
+		this.child.sys_class_name = ciRelObjToInitFrom.child.sys_class_name.toString();
+		this.child.company = ciRelObjToInitFrom.child.company.toString();
+		this.child.operational_status = ciRelObjToInitFrom.child.operational_status;
+
+		this.type.sys_id = ciRelObjToInitFrom.type.sys_id.toString();
+		this.type.name = ciRelObjToInitFrom.type.name;
+
+		this.connection_strength = ciRelObjToInitFrom.connection_strength;
+		this.percent_outage = ciRelObjToInitFrom.percent_outage;
+
+		this.log.logObject(this.parent, "initFromCIRelation this.parent");
+		this.log.logObject(this.child, "initFromCIRelation this.child");		
+		this.log.debug("[initFromCIRelation] End");		
+	},
+
+
+	/**SNDOC
+		@name initFromAlertCMDBRelCI
+		@description Initialize the CI Relation Object from table 'x_atpu_rtsm_rtsm_cmdb_rel_ci'
+		@author ATF2
+		@param  {x_atpu_rtsm_rtsm_cmdb_rel_ci} [alertCiRelGR] - GlideRecord holding a CI Relation
+		*/
+	initFromAlertCMDBRelCI: function (alertCiRelGR) {
+		this.log.debug("[initFromAlertCMDBRelCI] Start");
+
+		this.parent.sys_id = alertCiRelGR.parent.toString();
+		this.parent.sys_class_name = alertCiRelGR.parent.sys_class_name.toString();
+		this.parent.company = alertCiRelGR.parent_int_ref.company.toString();
+		this.parent.operational_status = parseInt(alertCiRelGR.parent.operational_status);
+
+		this.child.sys_id = alertCiRelGR.child.toString();
+		this.child.sys_class_name = alertCiRelGR.child.sys_class_name.toString();
+		this.child.company = alertCiRelGR.child_int_ref.company.toString();
+		this.child.operational_status = parseInt(alertCiRelGR.child.operational_status);
+
+		this.type.sys_id = alertCiRelGR.type.toString();
+		this.type.name = alertCiRelGR.type.parent_descriptor + "::" + alertCiRelGR.type.child_descriptor;
+
+		this.connection_strength = alertCiRelGR.connection_strength;
+		if (alertCiRelGR.percent_outage != null) {
+			this.percent_outage = alertCiRelGR.percent_outage;
+		}
+
+		this.log.logObject(this.parent, "initFromAlertCMDBRelCI this.parent");
+		this.log.logObject(this.child, "initFromAlertCMDBRelCI this.child");	
+		this.log.debug("[initFromAlertCMDBRelCI] End");		
+	},
+
+	/**SNDOC
+		@name matchesConnectionStrength
+		@description Checks if connection strength of a CI Relation is one of (Always, Cluster, Infrequent, Occasional)
+		@author ATF2
+		@param  {String} [connectionStrengthArray] - Array of Strings with connection strength values
+		@returns {Boolean} true -> current CI Relation matches one of the provided Param1, false -> the CI Relation does not match one of the provided Param1
+		*/
+	matchesConnectionStrength: function (connectionStrengthArray) {
+		log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelation");	
+		log.debug("[matchesConnectionStrength] Start");
+
+		if (connectionStrengthArray == null) {
+			log.debug("[matchesConnectionStrength] End connectionStrengthArray == null");
+			return false;
+		}
+
+		if (connectionStrengthArray.indexOf(this.connection_strength) == -1) {
+			log.debug("[matchesConnectionStrength] End connectionStrengthArray.indexOf(this.connection_strength) == -1");
+			return false;
+		} else {
+			log.debug("[matchesConnectionStrength] End");
+			return true;
+		}
+	},
+
+	__type: 'CIRelation'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>c5574e5adbc2bbc0da832539489619ea</sys_id>
+        <sys_mod_count>149</sys_mod_count>
+        <sys_name>CIRelation</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_c5574e5adbc2bbc0da832539489619ea</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-08 01:37:23</sys_updated_on>
+    </sys_script_include>
+</record_update>

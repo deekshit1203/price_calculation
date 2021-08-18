@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.TableUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Table Utilities</description>
+        <name>TableUtil</name>
+        <script><![CDATA[/**SNDOC
+@domain Utilities
+*/
+var TableUtil = Class.create();
+TableUtil.prototype = {
+    initialize: function () {},
+
+    isSublass: function (clazz, generalClass) {
+        var arrayUtil = new global.ArrayUtil();
+        hier = this.generalization(clazz);
+        //gs.info('hierarchy: ' + hier +', generalClass: '+ generalClass);
+        return arrayUtil.contains(hier, generalClass);
+    },
+
+    hierarchy: function (clazz) {
+        hier = new GlideTableHierarchy(clazz);
+        return hier.getHierarchy();
+    },
+
+    generalization: function (clazz) {
+        hier = new GlideTableHierarchy(clazz);
+        return hier.getTables();
+    },
+
+    subclasses: function(clazz) {
+        hier = new GlideTableHierarchy(clazz);
+        return hier.getAllExtensions();
+    },
+
+    type: 'TableUtil'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>hendrik.muller</sys_created_by>
+        <sys_created_on>2020-11-09 12:45:02</sys_created_on>
+        <sys_id>536a0a3edb94a010689c22d40596190a</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>TableUtil</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_536a0a3edb94a010689c22d40596190a</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:38:11</sys_updated_on>
+    </sys_script_include>
+</record_update>

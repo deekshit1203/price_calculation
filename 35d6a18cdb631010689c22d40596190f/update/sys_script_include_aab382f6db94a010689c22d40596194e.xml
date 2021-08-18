@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.GlideRecordUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>GlideRecord Utility functions</description>
+        <name>GlideRecordUtil</name>
+        <script><![CDATA[// Discovery class
+gs.include("PrototypeServer");
+/**SNDOC
+		@description Utility class for working with GlideRecords.
+		@name GlideRecordUtil
+		@domain Utilities
+		@author Tom Dilatush tom.dilatush@service-now.com, Cloned to RTSM to avoid changing the access rules for the ootb include.
+	*/
+var GlideRecordUtil = Class.create();
+
+GlideRecordUtil.prototype = {
+
+    initialize: function () {},
+    /**SNDOC
+    		@name getCIGR
+    		@returns {GlideRecord} a GlideRecord instance positioned to the given CI sys_id, and of the right cmdb class (table).
+    		@param {String} [sys_id] - the sys_id of the CI desired
+    	*/
+    getCIGR: function (sys_id) {
+        return this.getGR('cmdb_ci', sys_id);
+    },
+    /**SNDOC
+    		@name getGR
+            @description  Returns a GlideRecord instance for the given table, positioned to the given sys_id, and of the right class (table).
+            This method is useful when you need to load a GlideRecord from a sys_id, but you don't know what the actual table is (because it
+            may be extended from the base table).  This method always returns a GlideRecord of the correct type.
+    		@param {String} [base_table] - the name of the base table that the given sys_id is in
+    		@param {String} [sys_id] -  the sys_id of the CI desired
+    	*/
+    getGR: function (base_table, sys_id) {
+        // gs.info('ChildCi: ' +  base_table + ' / ' + sys_id);
+
+        // first query the base table, and bail out if we can't find it...
+        var gr = new GlideRecord(base_table);
+        if (!gr.get(sys_id)) {
+            return null;
+        }
+
+        // now see what class this CI really is...
+        var klass = gr.getRecordClassName();
+        // gs.info('ChildCi: klass ' +  klass);
+
+        // if it's actually the base class, we're done...
+        if (klass == base_table) {
+            return gr;
+        }
+
+        // re-query, but now using the right table, and bail out if we can't find it...
+        gr = new GlideRecord(klass);
+        if (!gr.get(sys_id)) {
+            return null;
+        }
+
+        // made it, so skedaddle with our results...
+        return gr;
+    },
+    /**SNDOC
+    		@name getFields
+    		@description  Get a list of all the fields in the given GlideRecord...
+    		@param {GlideRecord} [gr] -  the GlideRecord instance, positioned to a valid record
+    		@returns {Array} an array with the field names in the given GlideRecord
+    	*/
+    getFields: function (gr) {
+        //        var gf = gr.getFields(); // returns a Java ArrayList...
+        var elements = gr.getElements();
+        var flds = [];
+
+        // we do sys_id manually because GlideRecord.getFields() excludes it, for reasons unknown...
+        flds.push('sys_id');
+
+        for (var i = 0; i < elements.length; i++) {
+            var element = elements[i];
+            flds.push(element.getName());
+        }
+        // skedaddle with our results...
+        return flds;
+    },
+    /**SNDOC
+    		@name populateFromGR
+    		@description  Populate the given hashmap from the given GlideRecord instance.  Each field in the GlideRecord becomes a property in the hashmap.
+    		@param {Object} [hashmap] -  an Object instance (being used as a hashmap)
+    		@param {GlideRecord} [gr] -  a GlideRecord instance, positioned to a valid record
+    		@param {Object} [ignoreFields] -  an optional hashmap of field names to NOT populate
+    		@param {Object} [onlyFields] -  an optional hashmap of field names to populate
+    	*/
+        _populateFromGR: function (hashmap, gr, ignoreFields, onlyFields) {
+            var flds = this.getFields(gr);
+            // log = new RTSMLog(null, '[populateFromGR]');
+            // log.debug('_populateFromGR: START ');
+            // if (!gs.nil(ignoreFields)) log.debug('ignoreFields: ' + JSON.stringify(ignoreFields));
+            // if (!gs.nil(onlyFields)) log.debug('onlyFields: ' + JSON.stringify(onlyFields));
+
+            flds.forEach(function (fldName) {
+                var fldValue = gr.getValue(fldName);
+                if (!gs.nil(onlyFields)) {
+                    if (null == onlyFields[fldName]) {
+                        // log.debug('ignore: ' + fldName);
+                        return; //continue;
+                     } else {
+                        ; //log.trace('use: ' + fldName);
+                     }
+                } else if (!gs.nil(ignoreFields)) {
+                    // don't set the property for any field in the "ignoreFields fields" list...
+                    if (null != ignoreFields[fldName]) return; //continue;
+                }
+    
+                // don't set the property for a field with no value...
+                if (!fldValue) return; //continue;
+    
+                // finally! set our value...  
+                hashmap[fldName] = fldValue.toString();
+            });     
+            // log.debug('_populateFromGR: END ');
+        },
+
+        populateFromGR: function (hashmap, gr) {
+            this._populateFromGR(hashmap, gr, null, null);    
+        },
+         
+        populateFromGROnly: function (hashmap, gr, onlyFields) {
+            // log = new RTSMLog(null, '[populateFromGROnly]');
+            // log.debug('populateFromGROnly: START ');
+            this._populateFromGR(hashmap, gr, null, onlyFields);
+            // log.debug('populateFromGROnly: END ');
+        },
+         
+        populateFromGRIgnore: function (hashmap, gr, ignoreFields) {
+            this._populateFromGR(hashmap, gr, ignoreFields, null);    
+        },
+         
+    /**SNDOC
+    		@name mergeToGR
+    		@description  Set the fields in the given GlideRecord with the field values contained in the given hashmap, unless that field name is in the ignore hashmap.
+    		@param {Object} [hashmap] - an Object instance (being used as a hashmap), with properties named for fields and containing the fields' value
+    		@param {GlideRecord} [gr] -  the GlideRecord instance to set field values in.
+    		@param {Object} [ignore] - an optional hashmap of field names to ignore. 
+    	*/
+    mergeToGR: function (hashmap, gr, ignore) {
+        for (var fld_name in hashmap) {
+            if (ignore && ignore[fld_name]) {
+                continue;
+            }
+            var fld = hashmap[fld_name];
+            gr.setValue(fld_name, fld);
+        }
+    },
+    /**SNDOC
+    		@name getTables
+    		@description  Returns a Java ArrayList of the ancestors of the given table name.  For example, given cmdb_ci_linux_server, this would return cmdb_ci, cmdb_ci_computer, cmdb_ci_server, and cmdb_ci_linux_server.
+    		@param {String} [table] -  the name of the table to get the ancestors for.
+    	*/
+    getTables: function (table) {
+        return GlideDBObjectManager.getTables(table); // returns ArrayList...
+    },
+
+    /**SNDOC
+    		@name getGlideRecordByAttribute
+    		@description  Returns GlideRecord\s by attribute
+    		@param {String} [table] -  The table to query
+    		@param {String} [attributeName] -  The attribue to query
+    		@param {String} [attributeValue] -  The value to search
+    		@param {Boolean} [shouldUseINQuery] -  Determines whether to use "<attributeName> 'IN' <attributeValue>" query or "<attributeName> '=' <attributeValue>"
+    	*/
+    getGlideRecordByAttribute: function (table, attributeName, attributeValue, shouldUseINQuery) {
+
+        var glideRecord = new GlideRecord(table);
+
+        if (shouldUseINQuery)
+            glideRecord.addQuery(attributeName, 'IN', attributeValue);
+        else
+            glideRecord.addQuery(attributeName, attributeValue);
+
+        glideRecord.query();
+
+        return glideRecord;
+    },
+
+    type: 'GlideRecordUtil'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>hendrik.muller</sys_created_by>
+        <sys_created_on>2020-11-09 12:16:08</sys_created_on>
+        <sys_id>aab382f6db94a010689c22d40596194e</sys_id>
+        <sys_mod_count>53</sys_mod_count>
+        <sys_name>GlideRecordUtil</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_aab382f6db94a010689c22d40596194e</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:37:48</sys_updated_on>
+    </sys_script_include>
+</record_update>

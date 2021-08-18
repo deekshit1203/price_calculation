@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SerializerFactory</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for creating specific CI Tree SP Data Serialization objects depending on the provided needs.</description>
+        <name>SerializerFactory</name>
+        <script><![CDATA[/**SNDOC
+	@name SerializerFactory
+	@description create a serializer for the requested dataType
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var SerializerFactory = Class.create();
+SerializerFactory.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SerializerFactory");			
+	},
+	/**SNDOC
+	  @name createSerializer
+	  @description Factory to create data serializers
+	  
+	  @param {String} [queueType] - queueType for serializer
+	  @param {String} [dataType] - one of {CIRelationManager, CITreeSPImportCustomersInfo, CIRelation}
+	  @param {String} [customerSysId] - sys_id of customer
+	  @returns {SerializerCIRelationManager|serializeCITreeSPCustomerInfo|SerializerCIRelation} - the serializer
+	 */
+	createSerializer: function (queueType, dataType, customerSysId) {
+
+		this.log.info("createSerializer: Data Type is : " + dataType + " Queue Type is " + queueType + " Customer sys_id is " + customerSysId);
+
+		if (dataType == 'CIRelationManager') {
+
+			this.log.info("createSerializer: inside CIRelationManager : Data Type is :  " + dataType + " Queue Type is " + queueType + " Customer sys_id is " + customerSysId);
+			var serializeCIRelation = new SerializerCIRelationManager(queueType, dataType, customerSysId);
+			return serializeCIRelation;
+		} else if (dataType == 'CITreeSPImportCustomersInfo') {
+
+			this.log.info("createSerializer: inside CITreeSPImportCustomersInfo : Data Type is :  " + dataType + " Queue Type is " + queueType + " Customer sys_id is " + customerSysId);
+			var serializeCITreeSPCustomerInfo = new SerializerCITreeSPImportCustomersInfo(queueType, dataType, customerSysId);
+			return serializeCITreeSPCustomerInfo;
+		} else if (dataType == 'CIRelation') {
+
+			this.log.info("createSerializer: inside CIRelation : Data Type is :  " + dataType + " Queue Type is " + queueType + " Customer sys_id is " + customerSysId);
+			var CIRelation = new SerializerCIRelation(queueType, dataType, customerSysId);
+			return CIRelation;
+		} else {
+			this.log.info("createSerializer: Data Type is not available : " + null);
+			return null;
+		}
+
+	},
+
+	type: 'SerializerFactory'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>30c08e4cdb2ab7808471a7c74896194f</sys_id>
+        <sys_mod_count>17</sys_mod_count>
+        <sys_name>SerializerFactory</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_30c08e4cdb2ab7808471a7c74896194f</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-10-30 16:50:42</sys_updated_on>
+    </sys_script_include>
+</record_update>

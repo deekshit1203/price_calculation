@@ -1,0 +1,520 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSP</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Product: Bridge Paladin&#13;
+Application: RTSM&#13;
+Domain: Impact Calculation&#13;
+Purpose: Central script that manage the calculation of CI states </description>
+        <name>CITreeSP</name>
+        <script><![CDATA[/**SNDOC
+		@name CITreeSP
+		@description Central script that manage the calculation of CI states
+		@domain Impact Calculation
+		@author Thomas Grensemann
+		@require(ArrayUtil, CITreeSPCalc, ProcessingResult, CILoopDetector, CIHelper)
+		@version 1.0.0
+	*/
+var CITreeSP = Class.create();
+CITreeSP.prototype = {
+
+	initialize: function (param) {
+		/**SNDOC
+				@name 
+				@description  Possible CI Tree SP Processing Queue types
+				@constant {array}
+				@type {Array}
+				@private
+			*/
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSP");
+		this.ops = RTSMUtil.objectValues(RTSMConst.QO);
+		this.qState = RTSMConst.QueueState;			
+		this.qResult = RTSMConst.QueueProcessingResult;		
+		// AR 2021-02-11 PN-235
+		this.irr = new IRR();
+		this.ciHelper = new CIHelper();
+	},
+	/**SNDOC
+			@name processQueueEntry
+			@description Function to process and update an CI Tree SP Processing Queue Table object
+			@author ATF2
+			@param  {Object} [queueEntry] - Entry of the CI Tree SP Processing Queue Table object
+		*/
+	processQueueEntry: function (queueEntry) {
+		var result = new ProcessingResult('', '', '', '');
+		var processingDuration = null;
+		var queueEntrySysId = queueEntry.sys_id;
+		var startTime = new Date().getTime();
+
+		this.log.debug('>>> Start processQueueEntry');
+		this.log.logObject(queueEntry, 'queueEntry');
+
+		if (!queueEntry) {
+			this.log.error('[processQueueEntry] Processing Queue entry for sys_id=' + queueEntrySysId + ' does not exist');
+
+			return false;
+		}
+
+		//if ( RTSMConst.checkType(queueEntry.type)) {
+		if ( true) {
+				this.log.debug('[processQueueEntry] Processing Queue entry for sys_id=' + queueEntrySysId);
+
+			var alert = this._loadAlert('sys_id=' + queueEntry.alert);
+			var factory = new CITreeSPProcessorFactory();
+			var ciTreeSPProcessor = factory.createProcessor(queueEntry, alert, startTime);
+
+			if (ciTreeSPProcessor === null) {
+				//Processor was Not created by factory
+				this.log.debug('[processQueueEntry] Processor was Not created by factory');
+
+				result = new ProcessingResult('Not supported Execution Queue Type ' + queueEntry.type + ' provided!', this.qResult.ERROR, null, this.qState.PROCESSED);
+
+				this.log.debug('[processQueueEntry] after ProcessingResult ');
+				this.log.error('[processQueueEntry] Not supported Execution Queue Type for sys_id=' + queueEntrySysId);
+			} else {
+				// AR this.queueEntry -> queueEntry
+				this.log.info('[processQueueEntry] Process CI Tree SP Calculation for queue entry type=' + queueEntry.getValue("type"));
+
+				ciTreeSPProcessor.process();
+				result = ciTreeSPProcessor.getResult();		
+				this.log.debug('[processQueueEntry] result: ' + result);
+			}
+
+			processingDuration = this._calculateProcessingDuration(startTime);
+			result.setProcessingDuration(processingDuration);
+
+			this.log.info('[processQueueEntry] Get state from Processor=' + result.getState());
+
+			//Did the Processor set the State ?
+			if (result.getState() == null) {
+				//Set State to "Processed"
+				result.setState(this.qState.PROCESSED);
+			}
+
+			//Save Processing Queue Entry
+			this._updateQueueEntry('sys_id=' + queueEntrySysId, result);
+		}
+		this.log.debug('<<< End processQueueEntry');
+	},
+	/**SNDOC
+			@name addSP
+			@description Insert new, empty item into the CI Tree SP Table for given CI
+			@author ATF2
+			@param  {String} [sysId] - sys_id of CI that should be added to the SP
+			@param  {Boolean} [root] - Boolean, whether this CI is a Root CI   
+		*/
+	addSP: function (sysId, root) {
+		var spEntry = this.getCiTreeSP(sysId);
+
+		if (spEntry) {
+			this.log.error('[addSP] SP entry for CI sys_id=' + sysId + ' already in CI Tree SP table!');
+			return false;
+		}
+
+		var ci = new CIHelper().getCI('sys_id=' + sysId);
+
+		// >>> PN-235 AR 2021-02-11
+		//		set "is connector" flag in State Persistency
+		this.log.debug('[IRR] PN-235: ' + ci.sys_class_name + ' / ' + this.irr.isConnectorNode(ci.sys_class_name));
+		var newRecoderSysId = this._insertSPEntry(sysId, root, ci.sys_domain, this.irr.isConnectorNode(ci.sys_class_name));
+		this.log.debug('[addSP] new record sysId=' + newRecoderSysId);
+	},
+	/**SNDOC
+			@name deleteSP
+			@description  Deletes an item from the CI Tree SP Table and all related impacting alerts from CI Tree SP Processing Queue for given CI sys_id
+			@author ATF2
+			@param  {String} [sysId] - sys_id of CI to be deleted from SP
+		*/
+	deleteSP: function (sysId) {
+
+		if (!sysId) {
+			this.log.error('[deleteSP] CI sys_id is empty or null');
+
+			return false;
+		}
+
+		var spEntry = this.getCiTreeSP(sysId);
+
+		if (!spEntry) {
+			this.log.error('[deleteSP] SP entry for CI sys_id=' + sysId + ' does not exist');
+
+			return false;
+		}
+
+		var deleted = this._deletSPEntry(sysId);
+
+		this.log.debug('[deleteSP] record deleted= ' + deleted);
+	},
+
+
+	/**SNDOC
+			@name _loadAlert
+			@description Loads a Alert object for the given sys_id
+			@private
+			@author ATF2
+			@param  {String} [queryString] - encoded query to find alert in em_alert
+			@returns {Object} alert obect
+		*/
+	_loadAlert: function (queryString) {
+		var alert = null;
+
+		var sysAlert = new GlideRecord('em_alert');
+		sysAlert.addEncodedQuery(queryString);
+		sysAlert.query();
+
+		if (sysAlert.next()) {
+
+			this.log.debug("[_loadAlert] " + queryString + "= " + sysAlert);
+
+			alert = sysAlert;
+		}
+
+		return alert;
+	},
+	/**SNDOC
+			@name _loadQueueEntry
+			@description Loads a CI Tree SP Processing Queue Table object for a given query
+			@private
+			@author ATF2
+			@param  {String} [queryString] - Encoded query to find the queue entry in x_atpu_rtsm_citreesp_queue'
+			@returns {Object} CI Tree SP Processing Queue Table object or null
+		*/
+	_loadQueueEntry: function (queryString) {
+		var entry = null;
+
+		var treeSPQueue = new GlideRecord('x_atpu_rtsm_citreesp_queue');
+		treeSPQueue.addEncodedQuery(queryString);
+		treeSPQueue.query();
+
+		if (treeSPQueue.next()) {
+
+			this.log.debug("[_loadQueueEntry] " + queryString + "= " + treeSPQueue);
+
+			entry = treeSPQueue;
+		}
+
+		return entry;
+	},
+	/**SNDOC
+			@name _updateQueueEntry
+			@description Updates a CI Tree SP Processing Queue Table object
+			@author ATF2
+			@param  {String} [queryString] - query to find the x_atpu_rtsm_citreesp_queue object
+			@param  {String} [result] - Processing result to store in table
+		*/
+	_updateQueueEntry: function (queryString, result) {
+
+		var treeSPQueue = new GlideRecord('x_atpu_rtsm_citreesp_queue');
+		treeSPQueue.addEncodedQuery(queryString);
+		treeSPQueue.query();
+
+		if (treeSPQueue.next()) {
+
+			this.log.debug("[_updateQueueEntry] " + queryString + "= " + treeSPQueue);
+
+			treeSPQueue.processing_result = result.getProcessingResult();
+			treeSPQueue.error_message = result.getErrorMessage();
+			treeSPQueue.processing_duration = result.getProcessingDuration();
+			treeSPQueue.unique_cis = result.calculatedCIs();
+			treeSPQueue.state = result.getState();
+			treeSPQueue.dead_leaves = result.deadLeavesCount();
+			treeSPQueue.valid_leaves = result.validLeavesCount();
+
+			this.log.logObject(treeSPQueue, 'treeSPQueue');
+
+			treeSPQueue.update();
+		}
+	},
+	/**SNDOC
+			@name getCiTreeSP
+			@description Loads a Tree state persistency object from the CI Tree state persistency Table for a ci sys_id
+			@author ATF2
+			@param  {String} [ciSysID] - the sys_id of a ci for which to retrieve the ci tree sp entry from 'x_atpu_rtsm_ci_tree_state_persistency'
+			@returns {Object} CI Tree state persistency Table object or null
+		*/
+	getCiTreeSP: function (ciSysID) {
+		var entry = null;
+		var queryString = 'alert_ci.sys_id =' + ciSysID;
+
+		var ciTreeSP = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		ciTreeSP.addEncodedQuery(queryString);
+		ciTreeSP.query();
+
+		if (ciTreeSP.next()) {
+			this.log.debug("[getCiTreeSP] " + queryString + "= " + ciTreeSP);
+			entry = ciTreeSP;
+		}
+		return entry;
+	},
+	/**SNDOC
+			@name _insertSPEntry
+			@description Inserts a new record into the CI Tree state persistency Table
+			@private
+			@author ATF2
+			@param  {String} [sysId] - sys_id of the CI
+			@param  {Boolean} [root] - whether this CI is a Root CI   
+			@param  {String} [ciDomain] - sys_id of the CI domain
+			@returns {String} sys_id of the new record or null
+		*/
+	_insertSPEntry: function (sysId, root, ciDomain, isConnector) {
+		var treeState = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		treeState.initialize();
+		treeState.alert_ci = sysId;
+		treeState.is_root_ci = root;
+		treeState.sys_domain = ciDomain;
+		treeState.is_valid = root;
+		treeState.state_potential = RTSMConst.Severity_OK;
+		treeState.state_intrinsic = RTSMConst.Severity_OK;
+		// >>> PN-235 AR 2021-02-11
+		//		set "is connector" flag in State Persistency
+		treeState.is_connector_ci = isConnector;
+
+		//To check       
+		var helper = new CSCalcHelper();
+		helper.updateDetails(treeState);
+		return treeState.insert();
+	},
+	/**SNDOC
+			@name _deletSPEntry
+			@description Deletes a record from the CI Tree state persistence Table 
+			@private
+			@author ATF2
+			@param  {String} [sysId] - sys_id of the CI
+			@returns {Boolean} true, if action was successful
+		*/
+	_deletSPEntry: function (sysId) {
+		var ciTreeSP = this.getCiTreeSP(sysId);
+		if (ciTreeSP) {
+			return ciTreeSP.deleteRecord();
+		}
+	},
+	/**SNDOC
+			@name _calculateProcessingDuration
+			@description Calculates the processing duration time
+			@author ATF2
+			@param  {Number} [startTime] - start time of the process in UTC (Date().getTime())
+			@returns {Number} processing duration time in miliseconds
+		*/
+	_calculateProcessingDuration: function (startTime) {
+		var endTime = new Date().getTime();
+		var duration = endTime - startTime;
+
+		return duration;
+	},
+	/**SNDOC
+			@name triggerRecalculateCustomers
+			@description for each customer sys_id from an array, insert entry in the funnel filler for recalcCustoemer
+			@author ATF2
+			@param  {Array} [custSysID] - array of customer sys_ids to recalculate
+			@returns {String} 
+		*/
+	triggerRecalculateCustomers: function (custSysID) {
+		for (var i = 0; i <= custSysID.length - 1; i++) {
+			var funnelFiller = new FunnelFiller();
+			funnelFiller.insert(RTSMConst.QO.recalcCustomer, custSysID[i]);
+		}
+	},
+	/**SNDOC
+			@name lockSP
+			@description lock a ci for calculation
+			@author ATF2
+			@param  {String} [sys_id] - sys_id of CI that should be locked for calculation
+			@param  {String} [sys_id] - sys_id of Domain the CI resides on
+		*/
+	lockSP: function (ciSysId, ciDomainSysId) {
+		this.log.debug("[lockSP] Start");
+		//Load semaphore wait time from System Property 
+		var semaphoreWaitTimeAttribute = new RTSMUtil().getProperty(RTSMConst.citreesp_semaphore_wait_time);
+
+		this.semaphore = new DatabaseSemaphore(ciSysId, ciDomainSysId, 'CITreeSPProcessorCalc', semaphoreWaitTimeAttribute);
+		this.semaphore.lock();
+
+		this.log.debug("[lockSP] End");
+	},
+	/**SNDOC
+			@name unlockSP
+			@description unlock this.semaphore
+			@author ATF2
+		*/
+	unlockSP: function () {
+		this.log.debug("[unlockSP] Start");
+
+		this.semaphore.unlock();
+		this.log.debug("[unlockSP] End");
+	},
+	/**SNDOC
+			@name resetSP
+			@description reset the CI Tree SP entry for a CI (CSCalcHelper().resetCI())
+			@author ATF2
+			@param  {String} [ciSysId] - sys_id of CI for which the CI Tree SP entry has to be reset
+			@param  {Boolean} [flag] - optional value to set the CI as "Is Root" or not. If not provided the existing value is kept unchanged
+		*/
+	resetSP: function (ciSysId, flag) {
+		this.log.debug("[resetSP] Start");
+
+		this.log.info("[resetSP] SysId of CI for which the CI Tree SP entry has to be reset = " + ciSysId);
+		var ciTreeSP = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		ciTreeSP.addQuery('alert_ci.sys_id', ciSysId);
+		ciTreeSP.query();
+
+		if (ciTreeSP.next()) {
+			//Load CI Tree SP record from Param1 sys_id
+			new CSCalcHelper().resetCI(ciTreeSP);
+			if (flag !== null) {
+				//Param2 is set?
+				ciTreeSP.is_root_ci = true;
+			}
+			ciTreeSP.update();
+		}
+
+		this.log.debug("[resetSP] End");
+	},
+
+
+	//TODO: Domain handling
+	/**SNDOC
+			@name updateSP
+			@description update record in 'x_atpu_rtsm_ci_tree_state_persistency' with values of flagObj. If company is given also companies domain is updated.
+			@author ATF2
+			@param  {String} [ciSysId] - sys_id of CI for which the CI Tree SP entry has to be updated
+			@param  {String} [flagObj] - anonymous object holding the optional field to be updated: { company: String, sys_id of Company the entry should be updated to.,  isRoot: boolean, value to set  the CI as "Is Root" or not.}
+			@returns {Boolean} true-> Update was successful; false-> Error while update
+		*/
+	updateSP: function (ciSysId, flagObj) {
+		this.log.info("[updateSP] Start, SysID of CI = " + ciSysId);
+		var updateFlag = false;
+		var company = new CoreCompany();
+
+		var ciTreeSP = this.getCiTreeSP(ciSysId);
+		this.log.info("[updateSP] Loaded CI Tree SP record from Param1 sys_id");
+
+		if (ciTreeSP) {
+			if ('sys_domain' in ciTreeSP) {
+				if (flagObj.company) {
+					// Param2 company is set, so adjust the sys_domain field of the ciTreeSP record
+					var ret = company.load(flagObj.company);
+					if (ret === true) {
+						var retDomain = company.getDomain();
+						if (retDomain !== ciTreeSP.sys_domain) {
+							// Returned sys_domain is different to domain of CI Tree SP
+							ciTreeSP.sys_domain = retDomain;
+							updateFlag = true;
+						}
+					} else {
+						// Set Error
+						this.error = "Unable to load company for CI sys_id [" + ciSysId + "] to update SP " + company.getError();
+						this.log.debug("[updateSP] End Error= " + this.error);
+						return false;
+					}
+				}
+			}
+			if (flagObj.isRoot == true || flagObj.isRoot == false) {
+				// Param2 isRoot is set 
+				if (flagObj.isRoot != ciTreeSP.is_root_ci) {
+					// Param2 isRoot is different to isRoot of CI Tree SP
+					ciTreeSP.is_root_ci = flagObj.isRoot;
+					updateFlag = true;
+				}
+			}
+
+			if (updateFlag == true) {
+				// Update modified GlideRecord to the database
+				var result = ciTreeSP.update();
+				if (result == null) {
+					// Set Error
+					this.error = "Error while saving modified CI Tree SP Record for CI sys_id [" + ciSysId + "] to database ";
+					this.log.debug("[updateSP] End Error= " + this.error);
+					return false;
+				}
+			}
+
+			this.log.debug("[updateSP] End");
+			return true;
+		} else {
+			this.log.info("[updateSP] Unable to load CI Tree SP entry for CI sys_id [" + ciSysId + "] to update SP");
+			// Set Error
+			this.error = "Unable to load CI Tree SP entry for CI sys_id [" + ciSysId + "] to update SP ";
+			this.log.debug("[updateSP] End Error= " + this.error);
+			return false;
+		}
+
+	},
+	/**SNDOC
+			@name isManagedBy
+			@description Check if the state of a Ci is managed by manager
+			@param {RTSMConst.Manager_x<int>} [manager] - The ID of the domain manager to be checked
+			@param {String} [ciSysId] - the ci sys_id of which the state persistency record to be checked
+			@returns {Boolean} true if ci's ciTreeSp is managed by manager
+		*/
+	isManagedBy: function (manager, ciSysId) {
+		var spEntry = this.getCiTreeSP(ciSysId);
+		return spEntry['manager'] === manager;
+	},
+	/**SNDOC
+			@name calculateDomainData
+			@description calculate management domain data by ci sys_id
+			@param {String} [ciSysId] - The sys_id of the ci
+			@returns {GlideRecord(ci_tree_sp)} the calculated ci_tree_sp record
+		*/
+	calculateDomainData: function (ciSysId) {
+		var ciSpRec = this._transformCiTreeSP(ciSysId, CSCalcHelper.calculateDomainData);
+		return ciSpRec;
+	},
+	/**SNDOC
+			@name calculateIntrinsicState
+			@description calculate the intrinsic state by ci sys_id
+			@param {String} [ciSysId] - The sys_id of the ci
+			@returns {GlideRecord(ci_tree_sp)} the calculated ci_tree_sp record
+
+		*/
+	calculateIntrinsicState: function (ciSysId) {
+		//before calculate Intrinsic state, check if SP record exists
+		var ciTreeSP = this.getCiTreeSP(ciSysId);
+		if (ciTreeSP === null) {
+			//if in RTSL scope, generate SP
+			if (this.ciHelper.isRTSMCI(ciSysId)) {
+				var isRoot = this.ciHelper.isRootCI(ciSysId);
+				this.addSP(ciSysId, isRoot);
+			}
+		}
+		
+		var ciSpRec = this._transformCiTreeSP(ciSysId, CSCalcHelper.calculateIntrinsicState);
+		return ciSpRec;
+	},
+	/**SNDOC
+			@name _transformCiTreeSP
+			@description execute a transformation on a ct_tree_sp record by ci sys_id
+			@param {String} [ciSysId] - The sys_id of the ci
+			@param {Callable(GlideRecord(ci_tree_sp))} [transform] -   A function that executes a transformation on a ci_tree_sp record
+			@returns 
+		*/
+	_transformCiTreeSP: function (ciSysId, transform) {
+		var ciTreeSP = this.getCiTreeSP(ciSysId);
+		if (ciTreeSP === null) {
+			this.log.error('[_transformCiTreeSP] - could not find CiTreeSP entry for ciSysId= ' + ciSysId);
+			return null;
+		}
+		ciTreeSP = transform(ciTreeSP);
+		if (ciTreeSP)
+			ciTreeSP.update();
+		return ciTreeSP;
+	},
+	type: 'CITreeSP'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>ef7b16fcdbfd67c0f19e6def4b96199e</sys_id>
+        <sys_mod_count>254</sys_mod_count>
+        <sys_name>CITreeSP</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_ef7b16fcdbfd67c0f19e6def4b96199e</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:46:35</sys_updated_on>
+    </sys_script_include>
+</record_update>

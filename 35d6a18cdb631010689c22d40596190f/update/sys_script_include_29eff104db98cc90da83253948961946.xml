@@ -1,0 +1,729 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPImportCustomers</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates the import of the CI Relation from the OoB CMDB. To do this, each query from the CMDB Query Registry is executed via the OoB CMDB Query Builder application. As a result the object holds all valid CIRelationManagers and triggers the next step of the chain for each of those Managers.</description>
+        <name>CITreeSPImportCustomers</name>
+        <script><![CDATA[/**SNDOC
+	@name var CITreeSPImportCustomers
+	@description Build the impact tree from cmdb queries
+	@domain Impact Tree Builder
+	@author ATF2
+	@param  {String} [] - 
+	@returns {String} 
+	*/
+var CITreeSPImportCustomers = Class.create();
+CITreeSPImportCustomers.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPImportCustomers");	
+		this.ops = RTSMConst.QO;
+		this.qState = RTSMConst.QueueState;	
+		
+		//Hash of all Customer sys_id's and their related CIRelationManager
+		this.managers = Object.create(null);
+
+		//User object used for impersonation while import process
+		this.importUser = null;
+
+		//User ID of original user running the overall import process executed by the Import Scheduled Job (admin)
+		this.orgUser = "";
+
+		//If an error occurs, the error text is stored in this member
+		this.error = "";
+
+		//SI to encapsulate access to the OoB CMDB Query Builder tables and procedures
+		this.qb = null;
+
+		//Counts the number of imported queries from the query Registry
+		this.importedQueries = 0;
+
+		//User Company used for impersonation for import process
+		this.importUserCompany = null;
+
+		this.importCompany = null;
+
+	},
+
+
+	/**SNDOC
+		@name getManagers
+		@description Hash of all Customer sys_id's and their related CIRelationManager holding all CI Relations in scope of that Customer
+		@author ATF2
+		@returns {Object} Hash of all Customer sys_id's and their related CIRelationManager holding all CI Relations in scope of that Customer
+		*/
+	getManagers: function () {
+		return this.managers;
+	},
+
+	/**
+	 * 
+	 *
+	 * @returns {String}
+	 */
+	/**SNDOC
+		@name getError
+		@description Getter for internal errors
+		@author ATF2
+		@returns {String} If an error occurs, the error text is stored in this member
+		*/
+	getError: function () {
+		return this.error;
+	},
+
+
+	/**SNDOC
+		@name getImportedQueriesCount
+		@description 
+		@author ATF2
+		@returns {Number} this.importedQueries
+		*/
+	getImportedQueriesCount: function () {
+		return this.importedQueries;
+	},
+
+
+	/**SNDOC
+		@name runImport
+		@description Runs the import of all Query Registry queries being active for Generic and Customer Specific type
+		@author ATF2
+		@param  {String} [custSysId] - optional parameter holding the sys_id of the Customer to import, if omitted all CI Tree SP ECIM enabled customers are imported
+		@returns {Boolean},  true->Successful Import is done, false->Error while import
+		*/
+	runImport: function (custSysId) {
+		this.log.debug("Start [runImport]");
+
+		//Get value from System Property
+		var dataImportUserID = new RTSMUtil().getProperty(RTSMConst.citreesp_cmdbdataimport_user);			
+		//var dataImportUserID = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_cmdbdataimport_user));			
+		this.log.info("[runImport] dataImportUserID= " + dataImportUserID);
+
+		if (!dataImportUserID) {
+			//Set Error to member "error"
+			this.error = "The System Property citreesp_cmdbdataimport_user was not found or is not filled properly";
+			this.log.debug("End [runImport] !dataImportUserID Error= " + this.error);
+			return false;
+		}
+
+		if (custSysId) {
+			// Store parameter1 in member "importCompany"
+			this.importCompany = custSysId;
+		}
+
+		//Load to member "importUser"
+		this.importUser = new User();
+		var loadUserSuccess = this.importUser.loadUser(dataImportUserID);
+
+		if (loadUserSuccess === false) {
+			//Get error from User() object
+			this.error = this.importUser.getError();
+			this.log.debug("End [runImport] loadUserSuccess === false Error= " + this.error);
+			return false;
+		}
+
+		//Get User Company
+		this.importUserCompany = this.importUser.getCompany();
+
+		this.log.info("[runImport] User =" + this.importUser + ", User Company =" + this.importUserCompany);
+
+		//Import Generic Queries	
+		var genericQueryImportSuccess = this.importGenericQueries();		
+		if (genericQueryImportSuccess === false) {
+			this.log.debug("End [runImport] genericQueryImportSuccess === false");
+			return false;
+		}
+
+		//Import Customer Queries		
+		var customerQueryImportSuccess = this.importCustomerQueries();		
+		if (customerQueryImportSuccess === false) {
+			this.log.debug("End [runImport] customerQueryImportSuccess === false");
+			return false;
+		}
+
+		this.log.debug("End [runImport] normal exit");
+		return true;
+	},
+
+	/**
+	 * Imports all the Generic queries from the Query Registry 
+	 *
+	 * @returns {Boolean},  true->Successful Import is done, false->Error while import
+	 */
+	/**SNDOC
+		@name importGenericQueries
+		@description 
+		@author ATF2
+		@param  {String} [] - 
+		@returns {String} 
+		*/
+	importGenericQueries: function () {
+		this.log.debug("Start [importGenericQueries]");
+
+		var genericRegistryEntryObj = {};
+		var genericEntry = new CITreeSPQueryRegistry();
+
+		var countOfGenericQueries = genericEntry.getGenericRegistryEntryCount();
+		if (countOfGenericQueries > 0) {
+
+			var ciTreeSPCustomersArray = [];
+			var ciTreeSP = new SPConfig();
+
+			//Is member importCompany set
+			if (!this.importCompany) {
+				ciTreeSPCustomersArray = ciTreeSP.getCITreeSPEnabledCustomers("ArrayOfSysIds");
+			} else {
+				ciTreeSPCustomersArray.push(this.importCompany);
+			}
+
+			this.createManagers(ciTreeSPCustomersArray);
+
+			this.log.logObject(ciTreeSPCustomersArray, "ciTreeSPCustomersArray");
+
+			var result = this.importUser.setupVisibility(ciTreeSPCustomersArray);
+
+			if (result === false) {
+				//Set Error to member "error"
+				this.error = this.importUser.getError();
+				this.log.debug("End [importGenericQueries] Error= " + this.error);
+				return false;
+			}
+
+			// User visibility setup was successful
+			do {
+				//Get Next Entry for Generic Queries
+				genericRegistryEntryObj = genericEntry.getNextGenericRegistryEntry();
+				this.log.info("[importGenericQueries] Number =" + genericRegistryEntryObj.data.number + ", Customer =" + genericRegistryEntryObj.data.customer);
+
+				try {
+					this.log.logObject(genericRegistryEntryObj.data, "GENERIC genericRegistryEntryObj.data");					
+					var queryImportSuccess = this.importQuery(genericRegistryEntryObj.data);
+					if (queryImportSuccess === false) {
+						this.error = "[importGenericQueries] Import has failed for Query Registry [" + genericRegistryEntryObj.data.number + "]";
+						this.log.debug("End [importGenericQueries] Error= " + this.error);
+						return false;
+					}
+				} catch (err) {
+					this.error = err.message + "\n" + err.stack;
+					this.result.setError(this.error);
+				}
+
+			} while (genericRegistryEntryObj.moreData === true);
+		}
+		this.log.debug("End [importGenericQueries]");
+		return true;
+	},
+
+	/**SNDOC
+		@name importCustomerQueries
+		@description Imports all CMDB Query Builder queries, that are related to a dedicated Customer 
+		@author ATF2
+		@param  {String} [] - 
+		@returns {Boolean},  true->Successful Import is done, false->Error while import
+		*/
+	importCustomerQueries: function () {
+		this.log.debug("Start [importCustomerQueries]");
+
+		var customerRegistryEntryObj = {};
+		var customersArray = [];
+		var customerEntries = new CITreeSPQueryRegistry();
+
+		var countOfCustomerQueries = customerEntries.getCustomerRegistryEntryCount();
+		if (countOfCustomerQueries > 0) {
+
+			do {
+				var paramForManagers = [];
+				var rtsmCustomersArray = [];
+
+				//Get Next Entry for Customer Queries
+				customerRegistryEntryObj = customerEntries.getNextCustomerRegistryEntry();
+
+				// Get Customer for Registry Entry
+				var customerSysId = customerRegistryEntryObj.data.customer.toString();
+				this.log.debug("customerSysId = " + customerSysId);
+
+				// Get CI Tree enabled Customers
+				var ciTree = new SPConfig();
+				rtsmCustomersArray = ciTree.getCITreeSPEnabledCustomers("ArrayOfSysIds");
+
+				// Is Customer of Registry Entry enabled ?
+				if (rtsmCustomersArray.indexOf(customerSysId) !== -1) {
+					this.log.debug("[importCustomerQueries] rtsmCustomersArray.indexOf(customerSysId) !== -1 ");
+					//Get Cross-Customers
+					customersArray = customerEntries.getCrossCustomers();
+
+					//Joined Customers from Customer of query and Cross Customer entries
+					customersArray.push(customerSysId);
+
+					var result = this.importUser.setupVisibility(customersArray);
+					if (result === false) {
+						//Set Error to member "error"
+						this.error = this.importUser.getError();
+						this.log.debug("End [importCustomerQueries] result === false Error= " + this.error);
+						return false;
+					}
+
+					//Is member importCompany set
+					if (!this.importCompany) {
+						paramForManagers = customersArray;
+					} else {
+						paramForManagers.push(this.importCompany);
+					}
+
+					this.createManagers(paramForManagers);
+
+					try {
+						this.log.logObject(customerRegistryEntryObj.data, "CUSTOMER customerRegistryEntryObj.data");	
+						var queryImportSuccess = this.importQuery(customerRegistryEntryObj.data);
+						if (queryImportSuccess === false) {
+							this.error = "[importCustomerQueries] Import has failed for Query Registry [" + customerRegistryEntryObj.data.number + "]";
+							this.log.debug("End [importCustomerQueries] Error=" + this.error);
+							return false;
+						}
+					} catch (err) {
+						this.error = err.message + "\n" + err.stack;
+						this.result.setError(this.error);
+						this.log.debug("[importCustomerQueries] ERROR: " + this.error);						
+					}
+				}
+
+			} while (customerRegistryEntryObj.moreData === true);
+		}
+
+		//this.log.info("[importCustomerQueries] Query Registry [" + customerRegistryEntryObj.data.number +"]. After createManagers JSON= " + JSON.stringify(this.managers));
+		this.log.debug("End [importCustomerQueries] normal exit");
+		return true;
+	},
+
+	/**SNDOC
+		@name createManagers
+		@description Creates a CI Relation Manager object for each passed customer, if the manager does not exist yet
+		@author ATF2
+		@param  {Array} [custSysIdsArray] - array of sys_id's of all customers for which a manager should be created
+		@returns {String} 
+		*/
+	createManagers: function (custSysIdsArray) {
+		this.log.debug("Start [createManagers]");
+
+		//Next sys_id from passed Array
+		for (var i = 0; i < custSysIdsArray.length; i++) {
+
+			//Check if sys_id available in member "managers"
+			if (custSysIdsArray[i] in this.managers) {
+				//if (this.managers.hasOwnProperty(custSysIdsArray[i])) {
+
+				this.log.info("[createManagers] SysID [" + custSysIdsArray[i] + "] is already available in member managers");
+				continue;
+			} else {
+
+				this.log.info("[createManagers] SysID [" + custSysIdsArray[i] + "] is not available in member managers");
+
+				//Create CIRelationManager
+				var ciRelMan = new CIRelationManager();
+
+				//Set sys_id to member "customer" of CIRelationManager
+				ciRelMan.customer = custSysIdsArray[i];
+
+				//Add to managers hash object
+				this.managers[custSysIdsArray[i]] = ciRelMan;
+				this.log.logObject(ciRelMan, 'ciRelMan');
+				this.log.info("[createManagers] Customer from ciRelMan= " + ciRelMan.customer);
+			}
+		}
+
+		this.log.info("[createManagers] Keys from member managers= " + Object.keys(this.managers));
+		this.log.debug("End [createManagers]");
+	},
+
+	/**SNDOC
+		@name importQuery
+		@description  Imports one query from CMDB Query Registry, triggers query execution and stores results in CMDB Query Registry Import Results table
+		@author ATF2
+		@param  {Object} [queryGR] - GlideRecord for CMDB Query Registry
+		@returns {Boolean},  true->Successful Import is done, false->Error while import
+		*/
+	importQuery: function (queryGR) {
+		this.log.debug("Start [importQuery]");
+		var ciRelationCount = 0;
+		this.orgUser = gs.getUserID();
+
+		// if (RTSMConst.ImpersonateForImport) {
+		// 	var imp = new GlideImpersonate();
+		// } 
+		this.log.info("[importQuery] SysId of original User= " + this.orgUser + ", Name= " + gs.getUserName());
+
+		//Create new instance of APIForCMDBQB into member "qb"
+		this.qb = new APIForCMDBQB();
+
+		//Create GR for Import Results table
+		var importResultsGR = new GlideRecord('x_atpu_rtsm_citreesp_cmdb_query_registry_import_results');
+		importResultsGR.sys_domain = queryGR.sys_domain;
+		importResultsGR.query_registry_query = queryGR.sys_id;
+
+		//Impersonate member "importUser"
+		if (RTSMConst.ImpersonateForImport) {
+			// imp.impersonate(this.importUser.getUserSysID());
+			global.RTSMGlobalScopeUtils.scopedImpersonate(this.importUser.getUserSysID());
+			this.log.info("[importQuery] SysId of User to impersonate= " + this.importUser.getUserSysID() + ", Name= " + gs.getUserName());
+		}
+
+		this.log.logObject(importResultsGR, "importResultsGR" );
+		var resultsFromRunQuery = this.qb.runQuery(queryGR.rtsm_query);
+		this.log.debug("resultsFromRunQuery = " + resultsFromRunQuery);
+
+		if (resultsFromRunQuery === true) {
+			//Load wait time from System Property and use for next step as Param1
+			var dataImportTimeOutAttribute = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_cmdbdataimport_importtimeout));				
+			dataImportTimeOutAttribute = parseInt(dataImportTimeOutAttribute); //String to Integer
+
+			var resultsFromWaitQueryFinished = this.qb.waitQueryFinished(dataImportTimeOutAttribute);
+			if (resultsFromWaitQueryFinished === true) {
+
+				var resultsFromIsRunSuccessful = this.qb.isRunSuccessful();
+				if (resultsFromIsRunSuccessful === true) {
+					//AR ARROW
+					var resultsFromGetCIRelations = this.qb.getCIRelations();
+					this.log.logObject(resultsFromGetCIRelations, "[resultsFromGetCIRelations]");	
+					this.log.debug("[resultsFromGetCIRelations.success] " + resultsFromGetCIRelations.success );	
+									
+					//Hash returned from Call to method getCIRelations()
+					if (resultsFromGetCIRelations.success === true) {
+
+						var ciRelationFilled = this.fillCIRelationsIntoManager(resultsFromGetCIRelations.data);
+						if (ciRelationFilled === true) {
+
+							ciRelationCount = Object.keys(resultsFromGetCIRelations.data).length;
+							this.log.info("[importQuery] CI Relation Count= " + ciRelationCount);
+							//Increase member "importedQueries" by 1
+							this.importedQueries++;
+
+							//Impersonate member "orgUser"
+							if (RTSMConst.ImpersonateForImport) {
+								// imp.impersonate(this.orgUser);
+								global.RTSMGlobalScopeUtils.scopedImpersonate(this.orgUser);								
+							}
+
+							//Set data on Import Results gr
+							importResultsGR.run_time = new GlideDateTime();
+							importResultsGR.import_state = 10; //OK
+							importResultsGR.import_message = "CMDB Query Builder query returned " + Object.keys(resultsFromGetCIRelations.data).length + " CI Relations";
+							importResultsGR.ci_rel_count = ciRelationCount;
+							importResultsGR.qb_total_run_time = this.qb.getQbTotalRunTime();
+							importResultsGR.qb_status = this.qb.getQbStatus();
+							importResultsGR.qb_query_status = this.qb.getQbQueryStatus();
+							this.log.logObject(importResultsGR, "importResultsGR" );
+
+							importResultsGR.insert();
+
+							this.log.debug("End [importQuery]");
+							return true;
+						}
+					}
+				}
+			}
+		}
+
+		//Set Error to member "error"
+		this.error = this.qb.error;
+		this.log.info("[importQuery] Error= " + this.error);
+
+		if (RTSMConst.ImpersonateForImport) {
+			// imp.impersonate(this.orgUser);
+			global.RTSMGlobalScopeUtils.scopedImpersonate(this.orgUser);					
+		}
+
+		//Set data on Import Results gr
+		importResultsGR.run_time = new GlideDateTime();
+		importResultsGR.import_state = 20; //ERROR
+		importResultsGR.import_message = this.error;
+		importResultsGR.ci_rel_count = ciRelationCount;
+		importResultsGR.qb_total_run_time = this.qb.getQbTotalRunTime();
+		importResultsGR.qb_status = this.qb.getQbStatus();
+		importResultsGR.qb_query_status = this.qb.getQbQueryStatus();
+		importResultsGR.insert();
+
+		this.log.debug("End [importQuery]");
+		return false;
+	},
+
+	/**SNDOC
+		@name fillCIRelationsIntoManager
+		@description Fill the CI Relations into the according CIRelationsManager
+		@author ATF2
+		@param  {Object} [hashObj] -  Hash with sys_ids of CI Relations(cmdb_rel_ci) from the results of the CMDB Query Builder query run
+		@returns {Boolean},  true->Filling was successfully done, false->Error while filling
+		*/
+	fillCIRelationsIntoManager: function (hashObj) {
+		this.log.debug("Start [fillCIRelationsIntoManager]");
+
+		var result;
+		this.log.logObject(hashObj, 'hashObj ');
+
+		//>>> AR 2021-02-11 PN-235
+		var irr = new IRR();
+		// <<< PN-235
+
+		//CI Relation sys_ids from Param1
+		var hashKeys = Object.keys(hashObj);
+		this.log.debug('hashKeys.length: ' + hashKeys.length);
+		this.log.debug('this.importUserCompany: ' + this.importUserCompany);
+	
+		for (var i = 0; i < hashKeys.length; i++) {
+			//Next "cmdb_rel_ci" CI Relation sys_id from Param1 available?
+
+			this.log.debug('[initFromCMDBRelCI] [fillCIRelationsIntoManager] sys_id: ' + hashKeys[i]);
+			var ciRelationGR = new GlideRecord("cmdb_rel_ci");
+			ciRelationGR.get(hashKeys[i]);
+
+			// this.log.debug("[initFromCMDBRelCI] [fillCIRelationsIntoManager]: " + ciRelationGR.connection_strength);
+			// this.log.debug("[initFromCMDBRelCI] [fillCIRelationsIntoManager]: " + ciRelationGR.connection_strength.toString());
+			
+			this.log.debug('ciRelationGR.parent.company: ' + ciRelationGR.parent.company + ' / ciRelationGR.child.company: ' + ciRelationGR.child.company);
+
+			// >>> PN-235 AR 2021-02-11
+			//		filter out CI of classes which are manged by ITOM, except classes of type "is connector"
+
+			var parentClass = ciRelationGR.parent.sys_class_name.toString();
+			var childClass = ciRelationGR.child.sys_class_name.toString();
+			this.log.debug('[IRR] PN-235: parentClass: ' + parentClass + ' / childClass: ' + childClass);
+			var bRelationInScope = false;
+			var bChildIsConnector = false;
+			if (irr.isBridgeNode(parentClass)) {
+				if (irr.isBridgeNode(childClass)) {
+					this.log.debug('[IRR] PN-235: Parent & Child managed by Bridge -> add Relation');
+					bRelationInScope = true;
+				} else {
+					if (irr.isConnectorNode(childClass)) {
+						this.log.debug('[IRR] PN-235: Parent managed by Bridge, Child by ITOM and Connector -> add Relation');
+						bChildIsConnector = true;
+						bRelationInScope = true;
+					} else {
+						this.error = "Parent Class " + parentClass + " is managed by RTSM and Child Class " + childClass + " is managed by ITOM but is not defined as connector";
+						this.log.debug('[IRR] PN-235: Error: ' + this.error);
+						return false;						
+					}	
+				}
+			} else {
+				this.log.debug('[IRR] PN-235: Parent managed by ITOM -> ignore Relation');
+				var bRelationInScope = false;
+			}
+
+			// <<< PN-235
+			if (bRelationInScope) {
+				//TODO AR 2021-01-08 why this, always contininue?			
+				// if (ciRelationGR.parent.company.toString() == this.importUserCompany || ciRelationGR.child.company.toString() == this.importUserCompany) {
+				// 	//Filter unwanted CI Relations being returned via Import User's Company
+				// 	this.log.debug('0 continue ');
+				// 	continue;
+				// }
+			
+				//Is member importCompany set ?
+				if (!this.importCompany) {
+					result = this.addCIRelationToManager(ciRelationGR.child.company.toString(), ciRelationGR.child.company.name.toString(), ciRelationGR, bChildIsConnector);
+					this.log.debug('1 result = ' + result);
+					if (result === false) {
+						return false;
+					}
+					// Is Customer of Child CI different from Customer of Parent CI
+					if (ciRelationGR.child.company.toString() !== ciRelationGR.parent.company.toString()) {
+						result = this.addCIRelationToManager(ciRelationGR.parent.company.toString(), ciRelationGR.parent.company.name.toString(), ciRelationGR, bChildIsConnector);
+						this.log.debug('2 result = ' + result);
+						if (result === false) {
+							return false;
+						}
+					}
+				} else {
+					//Is Parent CI Company or Child CI Company same as the importCompany
+					if (ciRelationGR.parent.company.toString() == this.importCompany || ciRelationGR.child.company.toString() == this.importCompany) {
+						result = this.addCIRelationToManager(ciRelationGR.child.company.toString(), ciRelationGR.child.company.name.toString(), ciRelationGR, bChildIsConnector);
+						this.log.debug('3 result = ' + result);
+						if (result === false) {
+							return false;
+						}
+					}
+				}
+			}
+		}
+		this.log.debug("End [fillCIRelationsIntoManager]");
+		return true;
+	},
+
+	/**SNDOC
+		@name addCIRelationToManager
+		@description Adds one CI Relation to the according CIRelationManager object.
+		@author ATF2
+		@param  {String} custSysId] - sys_id of Customer for which the CI Relation should be inserted
+		@param  {String} [customerName] - Name of Customer for error message
+		@param  {Object} [ciRelationGR] - GlideRecord, CI Relation from OoB cmdb_rel_ci table to be inserted into manager
+		@param  {Boolean} [childIsConnector] - Child is a Connector CI
+		@returns {Boolean},  true->Filling was succesfully done; false->Error while filling, error is set in that case
+		*/
+	addCIRelationToManager: function (custSysId, customerName, ciRelationGR, childIsConnector) {
+		this.log.debug("Start [addCIRelationToManager]");
+		var parentCompany = ciRelationGR.parent.company.toString();
+		var childCompany = ciRelationGR.child.company.toString();
+
+		this.log.info("[addCIRelationToManager] Parent Company= " + parentCompany + ", Child Company= " + childCompany);
+
+		//Manager for Parent CI Company and Child CI Company of CI Relation exists ?
+		if ((parentCompany in this.managers) && (childCompany in this.managers)) {
+			//Get ciRelationManager from member "managers" for Param1 sys_id of Customer of CI
+			var ciRelManCustomer = this.managers[custSysId];
+			this.log.logObject(ciRelManCustomer, 'ciRelManCustomer');
+			if (!ciRelManCustomer) {
+				this.log.info("[addCIRelationToManager] ciRelManCustomer does not exists for Customer= " + custSysId);
+				this.log.debug("End [addCIRelationToManager]");
+				return true;
+			}
+
+			//Manager exists
+			var ciRelation = new CIRelation();
+			// this.log.debug("[initFromCMDBRelCI] [addCIRelationToManager]: " + ciRelationGR.connection_strength);
+			// this.log.debug("[initFromCMDBRelCI] [addCIRelationToManager]: " + ciRelationGR.connection_strength.toString());
+
+			ciRelation.initFromCMDBRelCI(ciRelationGR, childIsConnector);
+			//TODO AR added 2021-01-15 from Gayatri
+			ciRelation.cleanForSerialization(); 
+			var insertSuccess = ciRelManCustomer.insertCIRelation(ciRelation);
+
+			if (insertSuccess === false) {
+				//Set Error to member "error"
+				this.error = "Insertion of a CI Relation into the CI Relation Manager for Customer " + customerName + " with sys_id " + custSysId + "failed";
+				this.log.debug("End [addCIRelationToManager] Error= " + this.error);
+				return false;
+			}
+
+			this.log.info("[addCIRelationToManager] Insertion of a CI Relation into the CI Relation Manager for Customer " + customerName + " was successful.");
+			// Insertion was successful			
+		}
+
+		this.log.debug("End [addCIRelationToManager]");
+		// Addition of CI Relation to Manager is omitted
+		return true;
+	},
+
+	/**SNDOC
+		@name isImportCustomersRunning
+		@description Checks whether an "cmdbImportCustomers" queue entry is currently in progress
+		@author ATF2
+		@param  {DateTime} [dateTimeObj] - sys_created_on of the Queue Element, from which the running Import should be checked
+		@returns {Object}, with the parameters: {importRunning: boolean, customerTargetCount: integer, customerStartedCount: integer, customerOngoingCount: integer}
+		*/
+	isImportCustomersRunning: function (dateTimeObj) {
+		this.log.debug("Start [isImportCustomersRunning]");
+		this.log.debug("[isImportCustomersRunning] Sys_Created_On of the Queue Element, from which the running Import should be checked= " + dateTimeObj);
+
+		var validLeavesCount = 0;
+		var count = 0;
+		var ciTreeSP = new CITreeSPProcessingQueue();
+
+		var grQueueEntry = ciTreeSP.getLastEntry(this.ops.cmdbImportCustomers, null, dateTimeObj);
+
+		if (grQueueEntry) {
+			this.log.debug("[isImportCustomersRunning] SysID of last entry from CI Tree SP Queue= " + grQueueEntry.getValue("sys_id") + " / Sys_Created_On=" + grQueueEntry.getValue("sys_created_on"));
+
+			if (grQueueEntry.getValue("valid_leaves") != null) {
+				validLeavesCount = grQueueEntry.getValue("valid_leaves");
+				this.log.debug("[isImportCustomersRunning] validLeavesCount= " + validLeavesCount);
+			}
+
+			var theArray = [this.ops.cmdbImportCustomerLeftover];
+			var unprocessedEntryCount = ciTreeSP.getUnprocessedEntryCount(theArray, grQueueEntry.getValue("sys_created_on"));
+
+			this.log.debug("[isImportCustomersRunning] unprocessedEntryCount= " + unprocessedEntryCount);
+
+			var entriesArray = [this.ops.cmdbImportCustomerLeftover, this.ops.enableCustomerRTSM, this.ops.disableCustomerRTSM];
+			var entryCount = ciTreeSP.getEntryCount(entriesArray, grQueueEntry.getValue("sys_created_on"));
+
+			this.log.debug("[isImportCustomersRunning] entryCount= " + entryCount);
+
+			// AR 2021-04-07 Because validLeavesCount is always 1
+			//if (validLeavesCount == entryCount && unprocessedEntryCount == 0) {
+			if (unprocessedEntryCount == 0) {
+					this.log.debug("End [isImportCustomersRunning]");
+				return {
+					importRunning: false,
+					customerTargetCount: validLeavesCount,
+					customerStartedCount: entryCount,
+					customerOngoingCount: unprocessedEntryCount
+				};
+			}
+
+			this.log.debug("End [isImportCustomersRunning]");
+			return {
+				importRunning: true,
+				customerTargetCount: validLeavesCount,
+				customerStartedCount: entryCount,
+				customerOngoingCount: unprocessedEntryCount
+			};
+		}
+
+		// First run, no entry is available yet
+		this.log.debug("End [isImportCustomersRunning]");
+		return {
+			importRunning: false,
+			customerTargetCount: 0,
+			customerStartedCount: 0,
+			customerOngoingCount: 0
+		};
+	},
+
+	/**SNDOC
+		@name isEnableDisableCustomerRunning
+		@description Checks whether an enableCustomerRTSM or disableCustomerRTSM is currently running for the provided customer
+		@author ATF2
+		@param  {String} [dateTimeObj] - sys_created_on of the Queue Element, from which the running Enable or Disable should be checked
+		@param  {String} [custSydId] - sys_id of Customer to check
+		@returns {Boolean}, true->Enable or Disable is running; false->Enable and disable are not running
+		*/
+	isEnableDisableCustomerRunning: function (dateTimeObj, custSydId) {
+		this.log.debug("Start [isEnableDisableCustomerRunning]");
+
+		var ret;
+		var ciTreeSP = new CITreeSPProcessingQueue();
+
+		var enableCustomerGR = ciTreeSP.getLastEntry(this.ops.enableCustomerRTSM, custSydId, dateTimeObj);
+
+		//Last Entry available ?
+		if (enableCustomerGR) {
+			//Is state of last entry processed
+			if (enableCustomerGR.state == this.qState.PROCESSED) {
+				this.log.info("[isEnableDisableCustomerRunning] Last entry" + enableCustomerGR.sys_id + "is Processsed");
+			} else {
+				return true;
+			}
+		}
+
+		var disableCustomerGR = ciTreeSP.getLastEntry(this.ops.disableCustomerRTSM, custSydId, dateTimeObj);
+
+		//Last Entry available ?
+		if (disableCustomerGR) {
+			//Is state of last entry processed
+			if (disableCustomerGR.state == this.qState.PROCESSED) {
+				this.log.info("[isEnableDisableCustomerRunning] Last entry" + disableCustomerGR.sys_id + "is Processsed");
+			} else {
+				return true;
+			}
+		}
+
+		this.log.debug("End [isEnableDisableCustomerRunning]");
+		return false;
+	},
+
+	type: 'CITreeSPImportCustomers'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>29eff104db98cc90da83253948961946</sys_id>
+        <sys_mod_count>354</sys_mod_count>
+        <sys_name>CITreeSPImportCustomers</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_29eff104db98cc90da83253948961946</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-04-07 15:01:37</sys_updated_on>
+    </sys_script_include>
+</record_update>

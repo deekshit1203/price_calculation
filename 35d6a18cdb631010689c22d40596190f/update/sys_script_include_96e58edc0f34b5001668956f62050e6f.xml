@@ -1,0 +1,445 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CIHelper</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Helpder Class</description>
+        <name>CIHelper</name>
+        <script><![CDATA[/**SNDOC
+	@name CIHelper
+	@description Utilities to traverse the impact tree and get ci information
+	@domain Impact Calculation
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CIHelper = Class.create();
+CIHelper.prototype = {
+	initialize: function () {
+		if (!Array.prototype.indexOf) {
+			Array.prototype.indexOf = function (obj, start) {
+				for (var i = (start || 0), j = this.length; i < j; i++) {
+					if (this[i] === obj) {
+						return i;
+					}
+				}
+				return -1;
+			};
+		}
+		//TODO: Rework connection strength. Check ITOM concept first!
+		/**
+		 * CI relations connection strength types
+		 * @constant {array}
+		 * @type {Array}
+		 * @private
+		 */
+		this._CONNECTION_STRENGTH = ['always', 'cluster'];
+
+		this.metaDataRef = Object.create(null);
+
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIHelper");			
+	},
+	
+	/**SNDOC
+		@name getChildCIs
+		@description Return child CI recursively by queriying the cmdb_rel_ci
+		@author ATF2
+		@param  {String} [ci_sys_id] - 
+		@param  {Array} [children2ignore] - 
+		@returns {Array} list of all sys_id of all child CI
+		*/
+	getChildCIs: function (ci_sys_id, children2ignore) {
+		if (!children2ignore) {
+			children2ignore = ci_sys_id;
+		}
+		this.log.info(ci_sys_id + ' start: child2ignore: ' + children2ignore);
+
+		var own_children = [];
+		var children = [];
+
+		var rel = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+		rel.addQuery('parent', ci_sys_id);
+		if (children2ignore) {
+			rel.addQuery('child', 'NOT IN', children2ignore);
+		}
+		rel.query();
+
+		while (rel.next()) {
+			var child_sysid = rel.getValue("child").toString();
+			this.log.info(ci_sys_id + ' child found:' + child_sysid);
+
+			if (own_children.indexOf(child_sysid) > -1) {
+				this.log.info(ci_sys_id + ' duplicate child at array pos #' + own_children.indexOf(child_sysid));
+			} else {
+				own_children.push(child_sysid);
+				children2ignore = [children2ignore, child_sysid].join();
+			}
+		}
+
+		var child = own_children.pop();
+		while (child) {
+			children = children.concat(child);
+			this.log.info(ci_sys_id + ' recursive call for child ' + child);
+			// NNH todo: check children2ignore, and update to have children containing unique sys_id
+			children = children.concat(this.getChildCIs(child, children2ignore));
+			
+			child = own_children.pop();
+		}
+
+		return children;
+	},
+
+	/**SNDOC
+		@name getParentCIs
+		@description 
+		@author ATF2
+		@param  {String} [ci_sys_id] - 
+		@param  {Array} [ci_sys_id] - 
+		@returns {String} 
+		*/
+	getParentCIs: function (ci_sys_id, parents2ignore) {
+		if (!parents2ignore) {
+			parents2ignore = ci_sys_id;
+		}
+		this.log.info(ci_sys_id + ' start: parents2ignore: ' + parents2ignore);
+		var own_parents = [];
+		var parents = [];
+
+		var rel = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+		rel.addQuery('child', ci_sys_id);
+		if (parents2ignore) {
+			rel.addQuery('parent', 'NOT IN', parents2ignore);
+		}
+		rel.query();
+
+		while (rel.next()) {
+			var parent_sysid = rel.getValue('parent').toString();
+			this.log.info(ci_sys_id + ' parent found:' + parent_sysid);
+
+			this.log.info(ci_sys_id + ' duplicate parent at array pos #' + own_parents.indexOf(parent_sysid));
+
+			if (own_parents.indexOf(parent_sysid) == -1) {
+				own_parents.push(parent_sysid);
+				parents2ignore = [parents2ignore, parent_sysid].join();
+			}
+		}
+
+		var parent;
+		while (parent = own_parents.pop()) {
+			this.log.info(ci_sys_id + ' recursive call for parent ' + parent);
+			parents = parents.concat(this.getParentCIs(parent, parents2ignore)).concat(parent);
+		}
+
+		return parents;
+	},
+
+	/**SNDOC
+		@name isRelationInScope
+		@description 
+		@author ATF2
+		@param  {CiRelation} [ciRel] - Checks if a relation matches MetaDataReferenceRules or is a "contains" connection. Either ones are out of scope.
+		@returns {Boolean} true if realtion is in scope
+		*/
+	isRelationInScope: function (ciRel) {
+		//calling function matchesMetaDataReferenceRules
+		this.log.debug("[isRelationInScope] Start");
+		//TODO call of matchesMetaDataReferenceRules necessary???
+		//var match = this.matchesMetaDataReferenceRules(ciRel);
+		var match = true;
+
+		this.log.logObject(ciRel, "ciRel" );
+		this.log.logObject(ciRel.parent, "ciRel.parent" );
+		this.log.logObject(ciRel.child, "ciRel.child" );
+
+		this.log.debug("[isRelationInScope] ciRel.connection_strength= " + ciRel.connection_strength);
+
+		var contains = this.containsConnection(ciRel.connection_strength);
+		this.log.debug("[isRelationInScope] contains= " + contains);
+
+		if (match || !contains) {
+			// this.log.info('[SI][CIHelper][isRelationInScope] CI Relation is not in scope, Parent CI ' + ciRel.parent.getDisplayValue() + ' Child CI ' + ciRel.child.getDisplayValue() + ' Relation Type ' + ciRel.type.getDisplayValue());
+			this.log.debug("[isRelationInScope] End FALSE");
+			return false;
+		} else {
+			// this.log.info('[SI][CIHelper][isRelationInScope] CI Relation is in scope, Parent CI ' + ciRel.parent.getDisplayValue() + ' Child CI ' + ciRel.child.getDisplayValue() + ' Relation Type ' + ciRel.type.getDisplayValue());
+			this.log.debug("[isRelationInScope] End TRUE");
+			return true;
+		}
+	},
+	
+	//check if CI exists in Impact tree
+	isRTSMCI: function (ci_sys_id) {
+		var query_string = "child=" + ci_sys_id + "^ORparent=" + ci_sys_id;
+		
+		var rel = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+		rel.addEncodedQuery(query_string);
+		rel.setLimit(1);
+		rel.query();
+		if (rel.next()) {
+			return true;
+		}
+		return false;
+	},
+
+	//TODO: Decide if still needed: matchesMetaDataReferenceRules
+	/**SNDOC
+		@name matchesMetaDataReferenceRules
+		@description Checks parent->child and child->parent direction if there is reference rule defined in "cmdb_metadata_reference" between parent and child CI of the ciRel or for a generalization of the respective classes. See: https://docs.servicenow.com/bundle/paris-servicenow-platform/page/product/configuration-management/concept/c_ServiceRulesMetadata.html
+		@author ATF2
+		@param  {CiRelation} [ciRel] - 
+		@returns {Boolean} true -> matches a meta data reference rule 
+		*/
+	matchesMetaDataReferenceRules: function (ciRel) {
+
+		/*
+		Assumption:
+		1. it makes no sense to calculate impact via the reference relationsships.
+		2. SEV builds its impact tree in such a way that it copies all CI of a customer and all relations
+		3. In this case, it is necessary to filter out the relation that represent references.
+		4. In RTSM we will build the Impacttree via the CMDB queries. This means that only valid relations enter the model anyway, depending on the query. 
+		So we wouldn't need the metadata check.
+		https://docs.servicenow.com/bundle/paris-servicenow-platform/page/product/configuration-management/concept/c_ServiceRulesMetadata.html
+		*/
+		//Get Parent class, Child class and Relation type
+		var parentCIClass = ciRel.parent.sys_class_name;
+		var childCIClass = ciRel.child.sys_class_name;
+		var relType = ciRel.type;
+		this.log.info('[SI][CIHelper][matchesMetadataReferenceRules] Check CI relation for Parent CI ' + ciRel.parent.getDisplayValue() + ' Child CI ' + ciRel.child.getDisplayValue() + ' Relation Type ' + ciRel.type.getDisplayValue());
+
+		//Get value for Key "<Parent Class>|<Child Class>|<Relation Type>" from  "metaDataRef" hash
+		var metaDataRefKey = parentCIClass + "|" + childCIClass + "|" + relType;
+
+		//Is Key available in MetaDataReference Hash ?
+		if (metaDataRefKey in this.metaDataRef) {
+
+			//Get value from hash for Key to return
+			return this.metaDataRef[metaDataRefKey];
+
+		}
+
+		//Get Parent Ci classes of Parent Ci Class
+		var parentTablesArray = SNC.CMDBUtil.getTables0(parentCIClass);
+		var parentTables = parentTablesArray.toString();
+		parentTables = parentTables.slice(1, parentTables.toString().length() - 1);
+
+		//Get Parent Ci classes of Child Ci Class
+		var childTablesArray = SNC.CMDBUtil.getTables0(childCIClass);
+		var childTables = childTablesArray.toString();
+		childTables = childTables.slice(1, childTables.toString().length() - 1);
+
+		//Query CMDB Meta Data Reference Rules
+		var metaRules = new GlideRecord("cmdb_metadata_reference");
+		metaRules.addQuery("parent_type", "IN", parentTables);
+		metaRules.addQuery("child_type", "IN", childTables);
+		metaRules.addQuery("rel_type", relType.sys_id);
+		metaRules.setLimit(1);
+		metaRules.query();
+
+		if (metaRules.hasNext()) {
+			this.log.info('[SI][CIHelper][matchesMetadataReferenceRules] CI Relation matched atleast one meta data reference rule');
+			this.metaDataRef[metaDataRefKey] = true;
+			return this.metaDataRef[metaDataRefKey];
+		}
+
+		//Query CMDB Meta Data Reference Rules in reverse order
+		metaRules = new GlideRecord("cmdb_metadata_reference");
+		metaRules.addQuery("parent_type", "IN", childTables);
+		metaRules.addQuery("child_type", "IN", parentTables);
+		metaRules.addQuery("rel_type", relType.sys_id);
+		metaRules.addQuery("is_reverse", true);
+		metaRules.setLimit(1);
+		metaRules.query();
+
+		if (metaRules.hasNext()) {
+			this.log.info('[SI][CIHelper][matchesMetadataReferenceRules] CI Relation matched atleast one meta data reference rule in reverse order');
+			this.metaDataRef[metaDataRefKey] = true;
+			return this.metaDataRef[metaDataRefKey];
+		}
+
+		//No match for any CMDB Meta Data Rules
+		this.log.info('[SI][CIHelper][matchesMetadataReferenceRules] CI Relation did not match any meta data reference rule');
+		this.metaDataRef[metaDataRefKey] = false;
+		return this.metaDataRef[metaDataRefKey];
+
+	},
+
+
+	/**SNDOC
+		@name getParentCIRelations
+		@description Query cmdb_rel_ci with queryString and convert the result to an Array of sys_id of the query result. 
+		There is nothing special coded to get parent relations. This works only if the query string is: "child={child_sys_id}"
+		@author ATF2
+		@param  {String} [queryString] - an encoded query string to query the cmdb_rel_ci
+		@returns {Array} the sys_ids for the relations which satisfy the query or empty
+		*/
+	getParentCIRelations: function (queryString) {
+		var relations = [];
+
+		var rel = new GlideRecord('cmdb_rel_ci');
+		rel.addEncodedQuery(queryString);
+		rel.query();
+
+		while (rel.next()) {
+			relations.push(rel.getValue("sys_id"));
+		}
+
+		return relations;
+	},
+
+	/**SNDOC
+		@name getChildRelations
+		@description Find cmdb_rel_ci where cmdb_rel_ci.parent == sysIDCI and convert the result to an Array of sys_id of the query result.
+		@author ATF2
+		@param  {String} [sysIDCI] - The sys_id of the CI for which to get the children
+		@returns {Array} the sys_ids for the relations which point to child CI's
+		*/
+	getChildRelations: function (sysIDCI) {
+		var relations = [];
+
+		var rel = new GlideRecord('cmdb_rel_ci');
+		rel.addQuery("parent", sysIDCI);
+		rel.query();
+
+		while (rel.next()) {
+			relations.push(rel.getValue("sys_id"));
+		}
+
+		return relations;
+	},
+
+
+	/**SNDOC
+		@name getCI
+		@description Query cmdb_ci with sys_id of CI and return first result.
+		@author ATF2
+		@param  {String} [queryString] - an encoded query string to find the CI
+		@returns {cmdb_ci} The CI object 
+		*/
+	getCI: function (queryString) {
+		var ci = null;
+
+		var cmdbCI = new GlideRecord('cmdb_ci');
+		cmdbCI.addEncodedQuery(queryString);
+		cmdbCI.query();
+
+		if (cmdbCI.next()) {
+			ci = cmdbCI;
+		}
+
+		return ci;
+	},
+
+
+	/**SNDOC
+		@name containsConnection
+		@description Checks if connection_strength is included in the _CONNECTION_STRENGTH array.
+		@author ATF2
+		@param  {String} [connection] - connection_strength of the CI relation
+		@returns {Boolean} true if connection strength is in scope
+		*/
+	containsConnection: function (connection) {
+		var arrayUtil = new global.ArrayUtil();
+		this.log.debug("[containsConnection] connection= " + connection);
+		this.log.debug("[containsConnection] this._CONNECTION_STRENGTH= " + this._CONNECTION_STRENGTH);
+		return arrayUtil.contains(this._CONNECTION_STRENGTH, connection);
+	},
+
+	/**SNDOC
+		@name getConnections
+		@description  _CONNECTION_STRENGTH object getter
+		@author ATF2
+		@param  {String} [] - 
+		@returns {Array} _CONNECTION_STRENGTH
+		*/
+	getConnections: function () {
+		return this._CONNECTION_STRENGTH;
+	},
+
+	/**SNDOC
+		@name _createCIRelObject
+
+		@description create CI Relation helper object 
+		{
+			connection_strength: connectionStrength,
+			parent: {sys_id: parentSysId, sys_class_name: parentSysClassName}, 
+			child: {sys_id: childSysId, sys_class_name: childSysClassName}, 
+			type: {sys_id: typeSysId}
+		}
+		@author ATF2
+		@param  {String} [] - 
+		@returns {String} 
+		*/
+	_createCIRelObject: function (connectionStrength, parentSysId, parentSysClassName, childSysId, childSysClassName, typeSysId) {
+
+		return {
+			connection_strength: connectionStrength,
+			parent: {
+				sys_id: parentSysId,
+				sys_class_name: parentSysClassName
+			},
+			child: {
+				sys_id: childSysId,
+				sys_class_name: childSysClassName
+			},
+			type: {
+				sys_id: typeSysId
+			}
+		};
+	},
+
+	//TODO: We should use SacmDecommissionedCIinfo, perhaps under another name
+	/**SNDOC
+		@name isCIDecommissioned
+		@description check if CI is decomissioned.
+		@author ATF2
+		@param  {cmdb_ci} [grCI] - the ci glide record
+		@returns {Boolean} true -> ci is decommissioned
+		*/
+	isCIDecommissioned: function (grCI) {
+		var dcom = new SacmDecommissionedCIinfo();
+		var dcomStates = dcom.decommissionedStates(); // stores values Decommissioned 15, Disposed 18, Retired 6.
+
+		return dcomStates.indexOf(grCI.operational_status.toString()) != -1;
+	},
+
+
+	/**SNDOC
+		@name isRootCI
+		@description Checks whether a given CI is a Root CI or not. A Root CI is a CI, that has no Child connection, all Children are decommissioned or all Child CI Relations are out of scope (e.g. Infrequent or matching a CMDB Metadata Reference Rule).
+		@author ATF2
+		@param  {String} [ciSysID] - sys_id of CI to be checked for being a Root CI
+		@returns {Boolean} true -> The CI is a Root CI
+false -> The CI is NOT a Root CI
+		*/
+	isRootCI: function (ciSysID) {
+		var ciTreeRel;
+		var isRootCI = true;
+
+		// query "x_atpu_rtsm_rtsm_cmdb_rel_ci" to determine the root CIs
+		ciTreeRel = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+		ciTreeRel.addQuery('parent', ciSysID);
+
+		ciTreeRel.query();
+		while (ciTreeRel.next()) {
+			isRootCI = false; //The CI is NOT a Root CI				
+		}
+
+		return isRootCI;
+	},
+	type: 'CIHelper'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>96e58edc0f34b5001668956f62050e6f</sys_id>
+        <sys_mod_count>105</sys_mod_count>
+        <sys_name>CIHelper</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_96e58edc0f34b5001668956f62050e6f</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-12 20:21:13</sys_updated_on>
+    </sys_script_include>
+</record_update>

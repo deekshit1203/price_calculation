@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="alert_group_count_intrinsic" label="Alert Group Count Intrinsic" language="en" table="x_atpu_rtsm_ci_tree_state_persistency">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>alert_group_count_intrinsic</element>
+            <help/>
+            <hint/>
+            <label>Alert Group Count Intrinsic</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_ci_tree_state_persistency</name>
+            <plural>Alert Group Count Intrinsics</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>hendrik.muller</sys_created_by>
+            <sys_created_on>2020-11-12 15:17:07</sys_created_on>
+            <sys_id>1c8219a91b427010e5f386a3604bcbda</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Alert Group Count Intrinsic</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_ci_tree_state_persistency_alert_group_count_intrinsic_en</sys_update_name>
+            <sys_updated_by>hendrik.muller</sys_updated_by>
+            <sys_updated_on>2020-11-12 15:17:07</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

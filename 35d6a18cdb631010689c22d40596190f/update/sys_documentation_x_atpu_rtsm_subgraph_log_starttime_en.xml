@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="starttime" label="Start Time" language="en" table="x_atpu_rtsm_subgraph_log">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>starttime</element>
+            <help/>
+            <hint/>
+            <label>Start Time</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_subgraph_log</name>
+            <plural>Start Times</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-05-07 04:47:42</sys_created_on>
+            <sys_id>d092d9a91b427010e5f386a3604bcbba</sys_id>
+            <sys_mod_count>3</sys_mod_count>
+            <sys_name>Start Time</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_subgraph_log_starttime_en</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-05-07 13:51:43</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

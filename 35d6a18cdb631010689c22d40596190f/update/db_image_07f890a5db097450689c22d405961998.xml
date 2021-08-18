@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="db_image">
+    <db_image action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <category/>
+        <format>png</format>
+        <height>126</height>
+        <image>720994a5db097450689c22d405961978</image>
+        <name>PotentialState.png</name>
+        <size_bytes>3634</size_bytes>
+        <sys_class_name>db_image</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-06-29 10:14:54</sys_created_on>
+        <sys_id>07f890a5db097450689c22d405961998</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>PotentialState.png</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>db_image_07f890a5db097450689c22d405961998</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-29 10:15:01</sys_updated_on>
+        <thumbnail/>
+        <width>124</width>
+    </db_image>
+    <sys_attachment action="INSERT_OR_UPDATE">
+        <average_image_color>#e9e154</average_image_color>
+        <chunk_size_bytes>700000</chunk_size_bytes>
+        <compressed>true</compressed>
+        <content_type>image/png</content_type>
+        <file_name>image</file_name>
+        <hash>07ac418c681f1adce72caba58d6d011134a7c66c99c2b607b69a3e0a35f903cc</hash>
+        <image_height>126</image_height>
+        <image_width>124</image_width>
+        <size_bytes>3634</size_bytes>
+        <size_compressed>3637</size_compressed>
+        <state>available</state>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-06-29 10:15:00</sys_created_on>
+        <sys_domain>774190f01f1310005a3637b8ec8b70ef</sys_domain>
+        <sys_domain_path>!!!/</sys_domain_path>
+        <sys_id>720994a5db097450689c22d405961978</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-29 10:15:01</sys_updated_on>
+        <table_name>ZZ_YYdb_image</table_name>
+        <table_sys_id>07f890a5db097450689c22d405961998</table_sys_id>
+    </sys_attachment>
+    <sys_attachment_doc action="INSERT_OR_UPDATE">
+        <data>H4sIAAAAAAAAAA==</data>
+        <length>16</length>
+        <position>0</position>
+        <sys_attachment display_value="image" sys_id="720994a5db097450689c22d405961978">720994a5db097450689c22d405961978</sys_attachment>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-06-29 10:15:00</sys_created_on>
+        <sys_id>b20994a5db097450689c22d405961978</sys_id>
+    </sys_attachment_doc>
+    <sys_attachment_doc action="INSERT_OR_UPDATE">
+        <data>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</data>
+        <length>4836</length>
+        <position>1</position>
+        <sys_attachment display_value="image" sys_id="720994a5db097450689c22d405961978">720994a5db097450689c22d405961978</sys_attachment>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-06-29 10:15:00</sys_created_on>
+        <sys_id>360994a5db097450689c22d405961978</sys_id>
+    </sys_attachment_doc>
+</record_update>

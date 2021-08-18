@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_ui_form_sections form_id="025084bd1b23605051d64261cd4bcbc3" sys_domain="774190f01f1310005a3637b8ec8b70ef" table="x_atpu_rtsm_citreesp_queue" version="3">
+        <sys_ui_form action="INSERT_OR_UPDATE">
+            <name>x_atpu_rtsm_citreesp_queue</name>
+            <roles/>
+            <sys_class_name>sys_ui_form</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-04-16 13:31:24</sys_created_on>
+            <sys_domain>774190f01f1310005a3637b8ec8b70ef</sys_domain>
+            <sys_domain_path>!!!/</sys_domain_path>
+            <sys_id>025084bd1b23605051d64261cd4bcbc3</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>x_atpu_rtsm_citreesp_queue</sys_name>
+            <sys_overrides display_value="x_atpu_rtsm_citreesp_queue" name="x_atpu_rtsm_citreesp_queue" sys_domain="global" view="Default view">c25fc0f0db002450689c22d40596194e</sys_overrides>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_ui_form_sections_025084bd1b23605051d64261cd4bcbc3</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-04-16 13:31:24</sys_updated_on>
+            <sys_user/>
+            <view display_value="Default view" name="NULL">Default view</view>
+            <view_name/>
+        </sys_ui_form>
+    </sys_ui_form_sections>
+</record_update>

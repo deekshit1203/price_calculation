@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_db_view">
+    <sys_db_view action="INSERT_OR_UPDATE">
+        <description/>
+        <label>CI Tree SP Cluster Relation DB View</label>
+        <name>x_atpu_rtsm_cluster_ci_relation_child_sp</name>
+        <plural/>
+        <sys_class_name>sys_db_view</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-11-02 13:23:30</sys_created_on>
+        <sys_id>957d7d341b3c589c5408a9fe6e4bcb5b</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>x_atpu_rtsm_cluster_ci_relation_child_sp</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_db_view_957d7d341b3c589c5408a9fe6e4bcb5b</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-12-07 10:51:20</sys_updated_on>
+    </sys_db_view>
+</record_update>

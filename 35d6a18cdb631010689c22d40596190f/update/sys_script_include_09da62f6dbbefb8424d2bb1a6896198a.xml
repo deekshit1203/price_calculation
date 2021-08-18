@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPImportCustomersInfo</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates the information about the import of all CI Tree SP enabled Customers having a CMDB Query registered for. To do that it holds the information on the amount of expected and successfully done imports of single customers out of an import of all Customers.</description>
+        <name>CITreeSPImportCustomersInfo</name>
+        <script><![CDATA[/**SNDOC
+	@name var CITreeSPImportCustomersInfo
+	@description 
+	@domain Impact Tree Builder
+	@author ATF2
+	@param  {String} [] - 
+	@returns {String} 
+	*/
+var CITreeSPImportCustomersInfo = Class.create();
+CITreeSPImportCustomersInfo.prototype = Object.extendsObject(Log, {
+	initialize: function () {
+
+		//TODO: Normalize Logging
+
+		Log.prototype.initialize.call(this, 'CITreeSPImportCustomersInfo');
+
+		//Initialised Imported Customer Count value
+		this.importedCustomerCount = 0;
+
+		//Initialised Expected Customer Count value
+		this.expectedCustomerCount = 0;
+
+		//Initialised Erroneous Customer Count value
+		this.erroneousCustomerCount = 0;
+
+		//Object type
+		this.__type = 'CITreeSPImportCustomersInfo';
+	},
+
+	/**SNDOC
+		@name increaseImported
+		@description Incrementing the Imported customer count by 1
+		@author ATF2
+		*/
+	increaseImported: function () {
+
+		this.logDebug(" Start - increaseImported : Entered Increase Imported Function , Initial Imported Customer Count :- " + this.importedCustomerCount);
+
+		//
+		this.importedCustomerCount++;
+		this.logInfo(" increaseImported : Incremented Imported Customer Count :-  " + this.importedCustomerCount);
+
+		this.logDebug(" End - increaseImported : Ended Increase Imported Function ");
+
+	},
+
+	/**SNDOC
+		@name setExpected
+		@description set expected customer count
+		@author ATF2
+		@param  {Number} [customerCount] - number of expected customers
+		*/
+	setExpected: function (customerCount) {
+
+		this.logDebug(" Start - setExpected : Entered setExpected Function , Customer Count Value passed from argument :- " + customerCount);
+
+		//Passing the customer count value to the member variable expected customer count
+		this.expectedCustomerCount = customerCount;
+		this.logInfo(" setExpected : Now Expected Customer Count value is :- " + this.expectedCustomerCount);
+
+		this.logDebug(" End - setExpected : Ended setExpected Function ");
+
+	},
+
+	/**SNDOC
+		@name isImportFinished
+		@description Checks if the combine value of imported customer count and the erroneous count is greater then expected customer count
+		@author ATF2
+		@param  {String} [] - 
+		@returns {Boolean} true -> if import ios finished 
+		*/
+	isImportFinished: function () {
+
+		this.logDebug(" Start - isImportFinished : Entered isImportFinished Function -  Imported customer count :- " + this.importedCustomerCount + " Erroneous customer count :- " + this.erroneousCustomerCount + " Expected Customer Count :- " + this.expectedCustomerCount);
+
+		// Checks if the combine value of imported customercount and the erroneous count is greater then expected customer count
+		if ((this.importedCustomerCount + this.erroneousCustomerCount) >= this.expectedCustomerCount) {
+
+			this.logInfo(" isImportFinished : Imported customer count + Erroneous customer count greater than equal to Expected Customer Count :- " + true);
+			return true;
+		} else {
+			this.logInfo(" isImportFinished : Imported customer count + Erroneous customer count is less than or equal to Expected customer count :- " + false);
+			return false;
+		}
+
+		//TODO: unreachable code
+		this.logDebug(" End - isImportFinished : Ended isImportFinished Function ");
+
+	},
+
+	/**SNDOC
+		@name initFromImportCustomersInfo
+		@description Initialize expectedCustomerCount and importedCustomerCount from ciImportCustomerInfo
+		@author ATF2
+		@param  {CITreeSPImportCustomersInfo} [ciImportCustomerInfo] - an import info object
+
+		*/
+	initFromImportCustomersInfo: function (ciImportCustomerInfo) {
+
+		this.logDebug(" Start - initFromImportCustomersInfo : Entered initFromImportCustomersInfo Function -  Imported customer count :- " + this.importedCustomerCount + " Expected Customer Count :- " + this.expectedCustomerCount);
+
+		this.expectedCustomerCount = ciImportCustomerInfo.expectedCustomerCount;
+		this.importedCustomerCount = ciImportCustomerInfo.importedCustomerCount;
+
+		this.logInfo(" initFromImportCustomersInfo : Initialising the 'this' object values -  Imported customer count :- " + this.importedCustomerCount + " Expected Customer Count :- " + this.expectedCustomerCount);
+
+		this.logDebug(" End - initFromImportCustomersInfo : Ended initFromImportCustomersInfo Function ");
+
+	},
+
+
+	/**SNDOC
+		@name lock
+		@description Lock the CITreeSPImportCustomersInfo
+		@author ATF2
+		*/
+	lock: function () {
+		this.logDebug(" Start - lock : Entered CITreeSPImportCustomersInfo 'lock' Function");
+		new DatabaseSemaphore('CITreeSPImportCustomersInfo').lock();
+
+		this.logDebug(" End - lock : Ended CITreeSPImportCustomersInfo lock Function");
+	},
+
+	/**SNDOC
+		@name unlock
+		@description Lock the CITreeSPImportCustomersInfo
+		@author ATF2
+		*/
+	unlock: function () {
+		this.logDebug(" Start - unlock : Entered CITreeSPImportCustomersInfo 'unlock' Function");
+		new DatabaseSemaphore('CITreeSPImportCustomersInfo').unlock();
+
+		this.logDebug(" End - unlock : Ended CITreeSPImportCustomersInfo 'lock' Function");
+	},
+
+	/**SNDOC
+		@name getObjectType
+		@description getter for this.__type which is initialized to "CITreeSPImportCustomersInfo"
+		@author ATF2
+		@returns {String} 
+		*/
+	getObjectType: function () {
+		return this.__type;
+	},
+
+	/**SNDOC
+		@name cleanForSerialization
+		@description pepare this for serialization
+		@author ATF2
+		*/
+	cleanForSerialization: function () {
+
+		//TODO: provide serialization handling in normalized logger
+		Log.prototype.cleanForSerialization.call(this);
+	},
+
+
+
+	type: 'CITreeSPImportCustomersInfo'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>09da62f6dbbefb8424d2bb1a6896198a</sys_id>
+        <sys_mod_count>19</sys_mod_count>
+        <sys_name>CITreeSPImportCustomersInfo</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_09da62f6dbbefb8424d2bb1a6896198a</sys_update_name>
+        <sys_updated_by>hendrik.muller</sys_updated_by>
+        <sys_updated_on>2020-10-29 19:18:21</sys_updated_on>
+    </sys_script_include>
+</record_update>

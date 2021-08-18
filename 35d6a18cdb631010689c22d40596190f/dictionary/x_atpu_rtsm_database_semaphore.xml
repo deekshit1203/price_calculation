@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="no_audit_delete=true" label="Database Semaphore" max_length="40" name="x_atpu_rtsm_database_semaphore" type="collection">
+        <element attributes="goto_use_starts_with=true" label="Functionality" max_length="128" name="functionality" type="string"/>
+        <element attributes="goto_use_starts_with=true" label="Sync Object" max_length="128" name="sync_object" type="string"/>
+        <element attributes="edge_encryption_enabled=true" label="Domain" max_length="32" name="sys_domain" type="domain_id"/>
+        <element label="Domain Path" max_length="255" name="sys_domain_path" type="domain_path"/>
+        <index name="index">
+            <element name="sys_domain"/>
+        </index>
+        <index name="index2">
+            <element name="sys_domain_path"/>
+        </index>
+    </element>
+</database>

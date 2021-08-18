@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CSClusterCalculator</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Implementation of CI Tree SP - CS Cluster Calculator</description>
+        <name>CSClusterCalculator</name>
+        <script><![CDATA[/**SNDOC
+	@name CSClusterCalculator
+	@description 
+	@domain Impact Calculation
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CSClusterCalculator = Class.create();
+CSClusterCalculator.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CSClusterCalculator");		
+		this.ops = RTSMConst.QO;				
+	},
+
+/**SNDOC
+	@name calc
+	@description Calc function when connection strength is 'Always'
+	@param {*} [ciRelParCi] -  
+	@param {*} [opType] -  
+	@param {*} [evtObj] -  
+	@param {*} [ciObj] -  
+	@param {*} [clusCalFlag] -  
+	*/
+	calc: function(ciRelParCi, opType, evtObj, ciObj, clusCalFlag) {
+		this.ciRelPar = ciRelParCi;		
+
+		this.ciRelParSysId = this.ciRelPar.parent.sys_id;
+		this.ciRelChdSysId = this.ciRelPar.child.sys_id;	
+
+		//Set below member variable for Logging
+		this.parCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', this.ciRelParSysId, 'name');
+		this.chdCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', this.ciRelChdSysId, 'name');	
+
+		this.logPrefix = 
+			opType 
+			+ "_"
+			+ (opType == this.ops.recalcCI ? ciObj.getDisplayValue() : evtObj.getDisplayValue()) 
+			+ "_"
+			+ this.parCIName
+			+ "<-"
+			+ this.chdCIName
+			+ ": "
+		;
+		this.log.debug(this.logPrefix + "Start calc");
+
+		this.operationType = parseInt(opType, 10);
+		this.alertObj = evtObj;
+		this.ciobject = ciObj;
+		this.clustercalFlag = clusCalFlag;
+		var result = null;
+
+		this.parCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		this.parCITreeSPRec.addQuery('alert_ci', this.ciRelParSysId);
+		this.parCITreeSPRec.query();
+
+		if(!this.parCITreeSPRec.next()){
+			//Self Healing if entry on the CI Tree SP table is missing for this CI
+			this.log.info(this.logPrefix + "adding missing CI Tree SP of parent");
+			var ciTreeSP = new CITreeSP();
+			ciTreeSP.addSP(this.ciRelParSysId, false);
+
+			this.parCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+			this.parCITreeSPRec.addQuery('alert_ci', this.ciRelParSysId);
+			this.parCITreeSPRec.query();
+
+			if(!this.parCITreeSPRec.next()){
+				return true;
+			}
+		}
+
+		this.oldSPState = parseInt(this.parCITreeSPRec.state_potential.toString());
+		this.parCITreeSPRec.is_cluster = true;
+
+		this.childCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		this.childCITreeSPRec.addQuery('alert_ci', this.ciRelChdSysId);
+		this.childCITreeSPRec.query();
+		if(!this.childCITreeSPRec.next()){
+			//Self Healing if entry on the CI Tree SP table is missing for this CI
+			this.log.info(this.logPrefix + "adding missing CI Tree SP of child");
+			
+			var ciTreeSP = new CITreeSP();
+			var ciHelper = new CIHelper();
+			var isRoot = ciHelper.isRootCI(this.ciRelChdSysId);
+			ciTreeSP.addSP(this.ciRelChdSysId, isRoot);
+
+			this.childCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+			this.childCITreeSPRec.addQuery('alert_ci',this.ciRelChdSysId);
+			this.childCITreeSPRec.query();
+
+			if(!this.childCITreeSPRec.next()){
+				return true;
+			}
+		}
+		
+
+		if (
+			this.operationType == this.ops.recalcCI && this.childCITreeSPRec.is_root_ci      // recalcCI: child is root ci
+			|| this.operationType != this.ops.recalcCI && this.ciRelChdSysId == evtObj.cmdb_ci  // incoming alert on child 
+		) {  
+			// => upstream state of child needs recalculation
+			var csCalcHelper = new CSCalcHelper();
+			csCalcHelper.calcUpstreamState(this.childCITreeSPRec);
+			this.childCITreeSPRec.update();
+		}
+
+		//If recalcCI and the CI was not yet recalculated, then data has to be reset
+		if (this.operationType == this.ops.recalcCI && this.parCITreeSPRec.is_valid == false) {
+			//delete all impacting alerts, set potential et upstream state to OK (0)
+			new CSCalcHelper().resetCI(this.parCITreeSPRec);
+			this.parCITreeSPRec.setValue('is_valid', true);
+		}
+
+		this.clusterCalculator();
+		this.parCITreeSPRec.update();
+		this.log.debug(this.logPrefix + "End calc");
+
+		return true;	
+	},
+
+	/**SNDOC
+		@name clusterCalculator
+		@description 
+		*/
+	clusterCalculator: function() {
+		this.log.debug(this.logPrefix + "Start clusterCalculator");
+		var result = 0;
+		var childWeight;			
+
+		//Ignore Child CI's with Upstream == OK
+		var grRelationSP = new GlideRecord("x_atpu_rtsm_cluster_ci_relation_child_sp");
+		grRelationSP.addQuery("rel_parent", this.ciRelParSysId);
+		grRelationSP.addQuery("sp_upstream_state", "NOT IN", RTSMConst.Severity_OK + ',' + RTSMConst.Severity_Clear);
+		grRelationSP.query();
+		while (grRelationSP.next() && result < 100) {
+			var relPercentOutage = grRelationSP.getValue('rel_percent_outage');
+			// Set Percent Outage
+			relPercentOutage = parseInt(relPercentOutage, 10);
+			var child_upstream_state = grRelationSP.getValue('sp_upstream_state');
+			child_upstream_state = this._getChildSeverityPercentage(child_upstream_state);
+
+			/*
+			//OLD ATF
+			if(parseInt(grRelationSP.sp_u_upstream_state) == parseInt(RTSMConst.CITREE_STATE_AT_RISK)) {
+				childWeight = 1;
+			}
+			else if (parseInt(grRelationSP.sp_u_upstream_state) == parseInt(RTSMConst.CITREE_STATE_DEGRADATION)) {
+				childWeight = relPercentOutage * 0.5;
+			}
+			else if (parseInt(grRelationSP.sp_u_upstream_state) == parseInt(RTSMConst.CITREE_STATE_OUTAGE)) {
+				childWeight = relPercentOutage;
+			}
+			*/
+			
+			childWeight = (relPercentOutage * child_upstream_state) / 100;
+			
+			result += childWeight;		
+
+			this.log.debug(this.logPrefix + "grRelationSP.sp_u_upstream_state" + grRelationSP.sp_u_upstream_state + ";relPercentOutage=" + relPercentOutage +  "; result=" + result);
+		}
+
+		result = Math.min(result, 100);
+
+		if (result <= 12) {
+			this.parCITreeSPRec.state_potential = RTSMConst.Severity_OK;
+		} else if (result <= 37) {
+			this.parCITreeSPRec.state_potential = RTSMConst.Severity_Warning;
+		} else if (result <= 62) {
+			this.parCITreeSPRec.state_potential = RTSMConst.Severity_Minor;
+		} else if (result <= 87) {
+			this.parCITreeSPRec.state_potential = RTSMConst.Severity_Major;
+		} else {
+			this.parCITreeSPRec.state_potential = RTSMConst.Severity_Critical;
+		}
+		
+		/*
+		var exceeds1PLimit; // outage < 1% = OK => if there was an outage < 1% impacting alerts are missing => collect from all branches
+
+		if (result >= 1 && this.parCITreeSPRec.health > 99 && this.parCITreeSPRec.health < 100) {
+			exceeds1PLimit = true;
+		}
+		*/
+
+
+
+		this.parCITreeSPRec.health = 100 - result;	
+		var csCalcHelper = new CSCalcHelper();
+		csCalcHelper.calcUpstreamState(this.parCITreeSPRec);		
+		this.log.debug(this.logPrefix + "End clusterCalculator");
+	},
+	
+	_getChildSeverityPercentage: function(severity) {
+		severity = parseInt(severity, 10);
+		
+		var percentage = 0;
+		//(5-x)*25
+		percentage = (5 - severity) * 25 ;
+		
+		return percentage;
+	},
+
+	/**SNDOC
+		@name skipNextParentLevel
+		@description empy function. does only 'return'
+		*/
+	skipNextParentLevel: function() {
+		return 
+		this.oldSPState == RTSMConst.Severity_OK	
+		&& this.parCITreeSPRec.state_potential == RTSMConst.Severity_OK	
+		&& (this.operationType == 10 || this.operationType == 20 || this.operationType == 30) // Create+Update+Resolve
+		;
+	},
+
+	type: 'CSClusterCalculator'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>78d359fbdb27f34024d2bb1a68961914</sys_id>
+        <sys_mod_count>95</sys_mod_count>
+        <sys_name>CSClusterCalculator</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_78d359fbdb27f34024d2bb1a68961914</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:53:55</sys_updated_on>
+    </sys_script_include>
+</record_update>

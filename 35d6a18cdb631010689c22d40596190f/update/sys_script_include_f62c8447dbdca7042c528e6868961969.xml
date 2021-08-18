@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SPConfig</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This script include contains all methods required to handle changes or queries about the State Persistency configuration. </description>
+        <name>SPConfig</name>
+        <script><![CDATA[/**SNDOC
+	@name SPConfig
+	@description Build the impact tree for a customer
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var SPConfig = Class.create();
+
+SPConfig.prototype = {
+	/**SNDOC
+		@name initialize
+		@description 
+		*/
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SPConfig");
+	},
+	/**SNDOC
+		@name validateCustomer
+		@description 
+		@param {String} [customer] -  sys_id of customer
+		@returns {Boolean} true if customer has active SEV_SP in x_atpu_rtsm_customer_to_function
+		*/
+	validateCustomer: function (customer) {
+		this.log.debug("Start validateCustomer: " + customer);
+
+		if (!customer) {
+			this.log.error("validateCustomer: Customer is Null: " + customer);
+			return false;
+		}
+
+
+		//query " Customer To Function" table to check if customer is active or not
+		var cust = new GlideRecord('x_atpu_rtsm_customer_to_function');
+		cust.addQuery('customer', customer);
+		cust.addQuery('active', true);
+		cust.query();
+
+		if (cust.next()) {
+			this.log.info("validateCustomer: Customer is Active - " + customer);
+			this.log.debug("End validateCustomer: " + customer);
+			return true;
+		}
+
+		this.log.info("validateCustomer: Customer is Not Active - " + customer);
+		this.log.debug("End validateCustomer: " + customer);
+
+		return false;
+	},
+
+	// DONE: remove references to enableSP
+
+	/**SNDOC
+		@name enableCITreeSP
+		@description 
+- Set the CI Model to "CMDB" for CI Tree SP enabled customer
+- first delete all customer CIs from the CI Tree SP table
+- if deletion fails, Inactivate SP entry from  To Customer Function table
+- enable ci tree sp entries
+		@param {String} [customer] - sys_id of customer
+		@returns {Boolean} true if success
+		*/
+	enableCITreeSP: function (customer) {
+		this.log.debug("Start enableCITreeSP: " + customer);
+
+		if (!customer) {
+			this.log.error("enableCITreeSP: Customer is Null: " + customer);
+			return false;
+		}
+
+		//first delete all customer CIs from the CI Tree SP table
+		var ciTreeSPDisable = this.disableCITreeSP(customer);
+
+		var ciTreeSPEnable = this.enableCITreeSPEntries(customer);
+
+		if (ciTreeSPEnable === false) {
+			this.log.info("enableCITreeSP: customer CI entries not added - " + customer);
+			return false;
+		}
+
+		this.log.info("enableCITreeSP: customer is enabled successfully - " + customer);
+		this.log.debug("End enableCITreeSP: " + customer);
+
+		return true;
+	},
+
+	/**SNDOC
+		@name disableCITreeSP
+		@description 
+		@param {String} [customer] - sys_id of customer
+		*/
+
+	disableCITreeSP: function (customer) {
+		this.log.debug("Start disableCITreeSP: " + customer);
+
+		if (!customer) {
+			this.log.error("disableCITreeSP: Customer is Null: " + customer);
+			return false;
+		}
+
+		//query CI Tree state persistency table to delete customer CIs
+		var remCITreeCust = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		remCITreeCust.addQuery('alert_ci.company', customer);
+		remCITreeCust.deleteMultiple(); //deleted all records in the record set
+
+		this.log.info("disableCITreeSP: All customer CIs deleted from the CI Tree SP table: " + customer);
+
+		this.log.debug("End disableCITreeSP: " + customer);
+
+		return true;
+	},
+
+	//TODO: add calculateIntrinsicState to addCITreeSP
+
+	/**SNDOC
+		@name enableCITreeSPEntries
+		@description query cmdb_ci table to query all customer CIs except Operation Status is "Decommissioned", insert it in ´the CITreeSP table and calculate CI Tree SP status for all root CI
+		@param {String} [customer] - sys_id of customer
+		@returns {Boolean} true if success
+		*/
+	enableCITreeSPEntries: function (customer) {
+		this.log.debug("Start enableCITreeSPEntries: " + customer);
+
+		if (!customer) {
+			this.log.error("enableCITreeSPEntries: Customer is Null: " + customer);
+			return false;
+		}
+
+		var ciHelper = new CIHelper();
+		var rootCIArr = [];
+		var count = 0;
+		var rootCI = false;
+
+		//retrive decommissioned states from the SACM
+		var dcom = new SacmDecommissionedCIinfo();
+		var dcomStates = dcom.decommissionedStates();
+
+		//query cmdb_ci table to query all customer CIs except Operation Status is "Decommissioned"
+		var ciTreeEntry = new GlideRecord('cmdb_ci');
+		ciTreeEntry.addQuery('operational_status', 'NOT IN', dcomStates.toString());
+		ciTreeEntry.addQuery('company', customer);
+		ciTreeEntry.query();
+		while (ciTreeEntry.next()) {
+
+			rootCI = ciHelper.isRootCI(ciTreeEntry.sys_id.toString());
+
+			if (rootCI === true) {
+				rootCIArr.push(ciTreeEntry.sys_id.toString());
+			}
+
+			var addCI = new CITreeSP();
+			var add_result = addCI.addSP(ciTreeEntry.sys_id.toString(), rootCI);
+
+			if (add_result === false) {
+				this.log.info("enableCITreeSPEntries: CI addition failed, CI name - " + ciTreeEntry.name);
+			} else {
+				count = count + 1;
+			}
+		}
+		this.log.info("enableCITreeSPEntries: Number of CIs added to the state persistency table - " + count);
+
+		//calculate CI Tree SP status on a root CI
+		var i;
+		for (i = 0; i < rootCIArr.length; i++) {
+			this.log.info("enableCITreeSPEntries: root CI to be processed for the CI Tree status calculation - " + rootCIArr[i] + ", root CI array lenght: " + rootCIArr.length);
+
+			var result = this.enableCITreeSPEntry(rootCIArr[i].toString());
+
+			if (result === false) {
+				this.log.info("enableCITreeSPEntries: CI is not valid, CI sys_id - " + rootCIArr[i]);
+			}
+		}
+
+		this.log.info("enableCITreeSPEntries: All CI processed for enabling the CI Tree SP for the customer - " + customer);
+		this.log.debug("End enableCITreeSPEntries: " + customer);
+
+		return true;
+	},
+	//DONE: remove refs addSPEntry
+	/**SNDOC
+		@name enableCITreeSPEntry
+		@description add an addCI alert into the alert queue
+		@param {String} [ciSysId] - sys_id of a ci in cmdb_ci
+		*/
+	enableCITreeSPEntry: function (ciSysId) {
+		this.log.debug("Start enableCITreeSPEntry: " + ciSysId);
+
+		if (!ciSysId) {
+			this.log.error("enableCITreeSPEntry: ciSysId is Null: " + ciSysId);
+			return false;
+		}
+
+		var grCI = new GlideRecord('cmdb_ci');
+		grCI.get(ciSysId);
+
+		var ciTreeAdd = new FunnelFiller();
+		var add_result = ciTreeAdd.insert(RTSMConst.QO.addCI, grCI);
+
+		if (add_result === false) {
+			this.log.error("enableCITreeSPEntry: CI entry insertion in the Filter Funnel failed: " + ciSysId);
+			return false;
+		}
+
+		this.log.info("enableCITreeSPEntry: CI entry successfully added in the funnel for ci sys_d : " + grCI.sys_id + ", result : " + add_result);
+		this.log.debug("End enableCITreeSPEntry: " + ciSysId);
+		return true;
+	},
+
+	/**SNDOC
+		@name isCustomerRTSMEnabled
+		@description  Checks whether Customer is RTSM enabled.
+		@param {string} [sys_id] -  of Customer to check for CI Tree RTSM being enabled or not
+		@return {boolean} true -> CI Tree RTSM is enabled for Customer
+	                   false -> CI Tree RTSM is disabled for Customer
+		*/
+	isCustomerRTSMEnabled: function (customer) {
+		this.log.debug("Start isCustomerRTSM Enabled: " + customer);
+
+		if (!customer) {
+			this.log.error("isCusomerRTSMEnabled: customer is Null: " + customer);
+			return false;
+		}
+
+		//Query " To Customer Function" table to retrive RTSM enabled status
+		var cust = new GlideRecord('x_atpu_rtsm_customer_to_function');
+		cust.addQuery('active', true);
+		cust.orderBy('customer.name');
+		cust.query();
+		if (cust.next()) {
+			return true;
+		}
+		this.log.info("isCITreeSPEnabled: CI Tree SP is not enabled for the customer: " + customer);
+		this.log.debug("End isCITreeSPEnabled: " + customer);
+		return false;
+	},
+	/**SNDOC
+		@name isCIRTSMEnabled
+		@description  Checks whether CI is RTSM enabled.
+		@param {string} [sys_id] -  of CI to check if RTSM being enabled or not
+		@return {boolean} true -> CI  is RTSM enabled
+	                   false -> CI is RTSM disabled
+		*/
+	isCIRTSMEnabled: function (cisys) {
+		this.log.debug("Start isCIRTSMEnabled: " + cisys);
+
+		if (!cisys) {
+			this.log.error("isCIRTSMEnabled: CI is Null: " + cisys);
+			return false;
+		}
+
+		//Query Alert CMDB CI table to retrieve RTSM enabld status
+		var cisysID = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_ci');
+		cisysID.addQuery('cmdb_ci', cisys);
+		cisysID.query();
+		if (cisysID.next()) {
+			this.log.info("isCIRTSMEnabled: CI is RTSM enabled for the CI : " + cisys);
+			return true;
+		}
+		this.log.info("isCIRTSMEnabled: CI is not RTSM enabled for the CI: " + cisys);
+		this.log.debug("End isCIRTSMEnabled: " + cisys);
+		return false;
+	},
+	/**SNDOC
+		@name getCITreeSPEnabledCustomersRefQual
+		@description build a query string that retrieves all CI Tree SP enabled Customers
+		@returns {String} query string: 'sys_idIN' + custSysId,...
+		*/
+	getCITreeSPEnabledCustomersRefQual: function () {
+
+		var j = 0;
+		var custNameArr = [];
+		var custSysIds = [];
+
+		//Get the list of CI Tree SP enabled Customers
+		custNameArr = this.getCITreeSPEnabledCustomers();
+
+		while (j < custNameArr.length) {
+
+			//Get the SysIDs into an Array
+			custSysIds.push(custNameArr[j].sysID);
+			j++;
+		}
+
+		//Return Query String
+		return 'sys_idIN' + custSysIds.toString();
+
+	},
+	/**SNDOC
+		@name getCITreeSPEnabledCustomers
+		@description 
+- query "To Customer Function" table to retrieve all customers with "SEV SP"
+- check which ci models are defined for each customer in atos_customer_to_function ("CI Tree" or "CI Tree RTSM" or both)
+- RTSM Model has precedence over ciTree model, if both are defined on the customer
+		@param {String} [returnType] - "ArrayOfSysIds". Optional.
+		@param {String} [calculationType] -  can be "CI Tree" or "CI Tree RTSM", Optional. Unclear
+		@returns {Array(Object)|Array{String}} - type depends on 'returnType'
+- if returnType === Null return customer objects with keys {name, sys_id, ciModel }
+- if returnType == "ArrayOfSysIds" Return sys_ids "CI Tree RTSM" customers for generic query
+		*/
+	getCITreeSPEnabledCustomers: function (returnType, calculationType) {
+		this.log.debug("Start getCITreeSPEnabledCustomers");
+		var custArray = [];
+
+
+		//Query " To Customer Function" table to retrieve CI Tree SP enabled status
+		var cust = new GlideRecord('x_atpu_rtsm_customer_to_function');
+
+		cust.addQuery('active', true);
+		cust.orderBy('customer.name');
+		cust.query();
+		this.log.debug('[cust] ' + RTSMLog.logQuery(cust));
+
+		while (cust.next()) {
+			this.log.debug('[cust.customer.name] ' + cust.customer.name);
+			this.log.debug('[cust.customer] ' + cust.customer.toString());
+			if (!returnType) {
+				// Param1 is undefined	
+				var custObj = {};
+				custObj.name = cust.customer.name.toString();
+				custObj.sysID = cust.customer.toString();
+
+				custArray.push(custObj);
+				this.log.debug("Customer return values " + custObj.name + " ##" + custObj.sysID);
+			} else {
+				if (returnType == "ArrayOfSysIds") { // Return "CI Tree RTSM" customers for generic query
+					custArray.push(cust.customer.toString());
+				}
+			}
+		}
+
+		this.log.debug('custArray: ' + custArray);
+		this.log.debug("End getCITreeSPEnabledCustomers");
+		return custArray;
+	},
+	/**SNDOC
+		@name addCITreeSPEntry
+		@description  The function adds an empty, default entry for the given CI to the CI Tree SP table.
+		@param {string} [sys_id] -  of CI to be added to the CI Tree SP table
+		*/
+	addCITreeSPEntry: function (ciSysID) {
+		this.log.debug("Start addCITreeSPEntry");
+
+		var ciHelper = new CIHelper();
+
+		//ERROR - Given sys_id of CI is undefined
+		if (!ciSysID) {
+			this.log.error("getCITreeSPEnabledCustomers - unable to add CI as sys_id is undefined: " + ciSysID);
+			this.log.debug("Return addCITreeSPEntry");
+			return;
+		}
+
+		var isRootCI = ciHelper.isRootCI(ciSysID);
+
+		var ciTreeSP = new CITreeSP();
+		ciTreeSP.addSP(ciSysID, isRootCI);
+
+		this.log.debug("Return addCITreeSPEntry");
+	},
+
+	type: 'SPConfig'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>f62c8447dbdca7042c528e6868961969</sys_id>
+        <sys_mod_count>208</sys_mod_count>
+        <sys_name>SPConfig</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_f62c8447dbdca7042c528e6868961969</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:35:11</sys_updated_on>
+    </sys_script_include>
+</record_update>

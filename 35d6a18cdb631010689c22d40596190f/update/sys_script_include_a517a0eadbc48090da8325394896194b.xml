@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorDataImport</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for the CI Tree SP CMDB Data Import step.</description>
+        <name>CITreeSPProcessorDataImport</name>
+        <script><![CDATA[	/**SNDOC
+	@name CITreeSPProcessorDataImport
+	@description Process a request in the CI Tree SP Queue of Type "cmdbImportCustomers"
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+	var CITreeSPProcessorDataImport = Class.create();
+	CITreeSPProcessorDataImport.prototype = Object.extendsObject(CITreeSPProcessor, {
+		initialize: function () {
+
+			CITreeSPProcessor.prototype.initialize.call(this);
+			this.log = new RTSMLog(RTSMLog.LOG_DM_IMPACT_CALC, "CITreeSPProcessorDataImport");
+			this.__type = "CITreeSPProcessorDataImport";	
+
+			this.error = "";
+			this.importCustomers = new CITreeSPImportCustomers();
+			this.qState = RTSMConst.QueueState;				
+		},
+		/**SNDOC
+		@name process
+		@description  Process a request in the CI Tree SP Queue of Type "cmdbImportCustomers"
+		*/
+		process: function () {
+			this.log.debug("[CITreeSPProcessorDataImport.process] Start");
+
+			try {
+				var resultObj = this.importCustomers.isImportCustomersRunning(this.queueEntry.getValue("sys_created_on"));
+				this.log.logObject(resultObj,"MYAR resultObj");
+
+				// Is import run finished ?
+				if (resultObj.importRunning === true) {
+					// Last import of CMDB data is not finished yet
+					this.result.setState(this.qState.READY);
+					this.error = "Last Import of CMDB Data is not finished yet. Customers to be imported: " + resultObj.customerTargetCount + ", Customers when import started: " + resultObj.customerStartedCount + ", Customers when import is on-going: " + resultObj.customerOngoingCount;
+					this.result.setErrorMessage(this.error);
+					this.log.debug("[process] resultObj.importRunning === true Error= " + this.error);
+					return;
+				}
+
+				//First run, no entry is available yet
+				var registryCount = new CITreeSPQueryRegistry().getRegistryEntryCount();
+				this.log.info("[process]: Registry Entry count is - " + registryCount);
+
+				if (registryCount != 0) {
+					var importRun = this.importCustomers.runImport();
+					if (importRun === false) {
+						//Get error message from CITreeSPImportCustomers
+						this.error = this.importCustomers.getError();
+						this._setResultToError();
+						this.log.debug("[process] importRun === false Error= " + this.error);
+						return;
+					}
+
+					var dataFilterSuccess = this.triggerDataFilter(this.importCustomers);
+					if (dataFilterSuccess === false) {
+						this._setResultToError();
+						this.log.debug("[process] dataFilterSuccess === false");
+						return;
+					}
+					//triggerDataFilter was successful
+					this.result.setOk();				
+				} else {
+					//Nothing is configured
+					this.result.setOk();			
+					this.error = "No Queries configured for any Customer in the CMDB Query Registry";
+					this.result.setErrorMessage(this.error);
+				}
+			} catch (err) {
+				this.error = err.message + "\n" + err.stack;
+				this.result.setError(this.error);
+				this.log.debug("[process] ERROR: " + this.error);
+			}			
+
+			//Set Processing Result
+			this.result.validLeaves = this.triggeredCustomers;
+			this.result.deadLeaves = this.importCustomers.getImportedQueriesCount();
+			this.result.uniqueCis = this.totalUniqueCIRelationCount;
+
+			this.log.debug("[CITreeSPProcessorDataImport.process] End");
+		},
+		/**SNDOC
+		@name _setResultToError
+		@description 
+		*/
+		_setResultToError: function () {
+			this.result.setError(this.error);
+			this.result.validLeaves = this.triggeredCustomers;
+			this.result.deadLeaves = this.importCustomers.getImportedQueriesCount();
+			this.result.uniqueCis = this.totalUniqueCIRelationCount;
+
+		},
+
+		type: 'CITreeSPProcessorDataImport'
+	});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>a517a0eadbc48090da8325394896194b</sys_id>
+        <sys_mod_count>129</sys_mod_count>
+        <sys_name>CITreeSPProcessorDataImport</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_a517a0eadbc48090da8325394896194b</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-04-07 13:37:41</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege">
+    <sys_scope_privilege action="INSERT_OR_UPDATE">
+        <operation>delete</operation>
+        <source_scope/>
+        <status>allowed</status>
+        <sys_class_name>sys_scope_privilege</sys_class_name>
+        <sys_created_by>RTSM QueryBuilderUser</sys_created_by>
+        <sys_created_on>2021-07-05 08:40:15</sys_created_on>
+        <sys_id>c9ecfa1f1b4dbc5051d64261cd4bcbe8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>u_cmdb_qb_result_4ff709cefc5859bb1e67cec9d413fd0675669b5f</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_scope_privilege_c9ecfa1f1b4dbc5051d64261cd4bcbe8</sys_update_name>
+        <sys_updated_by>RTSM QueryBuilderUser</sys_updated_by>
+        <sys_updated_on>2021-07-05 08:40:15</sys_updated_on>
+        <target_name>u_cmdb_qb_result_4ff709cefc5859bb1e67cec9d413fd0675669b5f</target_name>
+        <target_scope display_value="Global">global</target_scope>
+        <target_type>sys_db_object</target_type>
+    </sys_scope_privilege>
+</record_update>

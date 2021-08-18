@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="alert_count_potential_total" label="Alert Count Potential Total" language="en" table="x_atpu_rtsm_ci_tree_state_persistency">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>alert_count_potential_total</element>
+            <help/>
+            <hint/>
+            <label>Alert Count Potential Total</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_ci_tree_state_persistency</name>
+            <plural>Alert Count Potential Totals</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>hendrik.muller</sys_created_by>
+            <sys_created_on>2020-11-16 15:24:47</sys_created_on>
+            <sys_id>588219a91b427010e5f386a3604bcbd8</sys_id>
+            <sys_mod_count>1</sys_mod_count>
+            <sys_name>Alert Count Potential Total</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_ci_tree_state_persistency_alert_count_potential_total_en</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2020-12-03 14:24:31</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

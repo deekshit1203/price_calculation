@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CIRelationManagerFilterImport</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates the filtering of an Import of CI Relations after CMDB Query Builder query import. The SI works closely together with the CIRelationManager.</description>
+        <name>CIRelationManagerFilterImport</name>
+        <script><![CDATA[/**SNDOC
+	@name CIRelationManagerFilterImport
+	@description Filter Relation Managers
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CIRelationManagerFilterImport = Class.create();
+CIRelationManagerFilterImport.prototype = {
+	initialize: function () {
+
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelationManagerFilterImport");	
+
+		//CIRelationManager which should be filtered
+		this.relManager = new CIRelationManager();
+
+		//Unconnected CIs are out of Scope for CI Tree SP calculation
+		this.checkForUnconnected = Object.create(null);
+
+		//Number of CI's identified as Decommissioned from filtering
+		this.decommissionedCICount = 0;
+
+		//Number of CI Relations being out of scope
+		this.outOfScopeCIRelCount = 0;
+
+		//Number of CI's that were removed as they were unconnected after the filtering
+		this.removedUnconnectedCICount = 0;
+
+	},
+
+
+	/**SNDOC
+		@name filter
+		@description Filters the CIRelationManager: filterDecommissionedCIs,filterRelationsOutOfScope
+		@author ATF2
+		@param  {Object} [ciRelationManagerObj] - CIRelationManager containing the current CI Relations to be filtered
+		@sideeffect  removedUnconnectedCICount
+		@sideeffect  relManager
+		@sideeffect  checkForUnconnected
+		*/
+	filter: function (ciRelationManagerObj) {
+		this.log.debug("[filter] Start");
+
+		//Clean "checkForUnconnected" member variable
+		this.checkForUnconnected = {};
+
+		//Store Param1 as "relManager"
+		this.relManager = ciRelationManagerObj;
+
+		//Filter all Decommissioned CIs from the CI Relations
+		this.filterDecommissionedCIs();
+
+		//Filter all CI Relations out of scope of Alert Management
+		//TODO AR 2021-01-05 Assumption: CMDB Query Builder only provide relations "in scope"
+		// this.filterRelationsOutOfScope();
+
+		//Remove all CI's that do not contain any "child" or "parent" connections anymore
+		this.removedUnconnectedCICount = this.relManager.removeUnconnectedCIs(this.checkForUnconnected);
+
+		this.log.debug("[filter] End");
+	},
+
+
+	/**
+	 * 
+	 *
+	 * 
+	 */
+	/**SNDOC
+		@name filterDecommissionedCIs
+		@description Filters the Decommissioned CIs. Retrieves all CI's sys_id from the cis hash of the CIRelationManager to check for "Decommissioned". Pass to "removeCI" - sys_id of CI which is to be removed from the CIRelationManager including CI Relation from and to this CI.
+		@author ATF2
+		@returns {String} 
+		*/
+	filterDecommissionedCIs: function () {
+		this.log.debug("[filterDecommissionedCIs] Start");
+
+		var decommCiSysIdsArray = [];
+		var unconnectedCIsHash = {};
+
+		var ciMan = this.relManager.createCIManager();
+		decommCiSysIdsArray = ciMan.getDecommissionedCIs();
+
+		for (var i = 0; i < decommCiSysIdsArray.length; i++) {
+
+			//Returned CIs are decommissioned and should be removed
+			this.log.info("[filterDecommissionedCIs] Get sysID of CI which is decommissioned : " + decommCiSysIdsArray[i]);
+
+			//Pass to "removeCI" - sys_id of CI which is to be removed from the CIRelationManager including CI Relation from and to this CI
+			unconnectedCIsHash = this.relManager.removeCI(decommCiSysIdsArray[i]);
+
+			this.decommissionedCICount++;
+
+			this.checkForUnconnected = unconnectedCIsHash;
+
+		}
+
+		this.log.info("[filterDecommissionedCIs] checkForUnconnected hash :  " + JSON.stringify(this.checkForUnconnected));
+		this.log.debug("[filterDecommissionedCIs] End");
+	},
+
+
+	/**SNDOC
+		@name filterRelationsOutOfScope
+		@description Filters the CI Relations which is out of scope of Alert Management. Applies to Connection Strength "Occasional" and "Infrequent" as well as CI Relations matching a CMDB Metadata Reference Rule.
+		@author ATF2
+		*/
+	filterRelationsOutOfScope: function () {
+		this.log.debug("[filterRelationsOutOfScope] Start");
+
+		var ciHelper = new CIHelper();
+
+		//Get keys from CIRelationManager cis hash
+		var hashKey = Object.keys(this.relManager.cis);
+
+		this.log.info("[filterRelationsOutOfScope] Get Keys from cis hash : " + hashKey);
+		this.log.info("[filterRelationsOutOfScope] Get CIRelationManager Hash = " + JSON.stringify(this.relManager.cis));
+
+		for (var i = 0; i < hashKey.length; i++) {
+
+			//Next hash Key available 
+			this.log.info("[filterRelationsOutOfScope] Get Key from Hash to check if RelationInScope or not : " + hashKey[i]);
+
+			//Get Parent Object
+			var parentObj = this.relManager.cis[hashKey[i]]["parent"];
+			this.log.logObject(parentObj, "[filterRelationsOutOfScope] parentObj");
+
+			//Get Parent Object Key from Hash
+			var parentObjKeys = Object.keys(parentObj);
+			this.log.logObject(parentObjKeys, "[filterRelationsOutOfScope] parentObjKeys");
+			this.log.debug("[filterRelationsOutOfScope] " + parentObjKeys.length);
+
+			for (var j = 0; j < parentObjKeys.length; j++) {
+				//Next key of Parent object available
+
+				//CI Relation Object from Parent for given Key
+				var ciRelObj = parentObj[parentObjKeys[j]];
+				this.log.logObject(ciRelObj, "[filterRelationsOutOfScope] ciRelObj");
+
+				if (ciHelper.isRelationInScope(ciRelObj) === false) {
+
+					//CI relation is out of scope
+					this.log.info("[filterRelationsOutOfScope] CI relation is out of scope for Parent: " + parentObjKeys[j] + ", Child: " + hashKey[i]);
+					//Pass the CIRelation Object which contains the CI Relation to be removed from Manager 
+					this.relManager.removeCIRelation(ciRelObj);
+
+					this.outOfScopeCIRelCount++;
+
+					//Store cis hash key in "checkForUnconnected" object
+					this.checkForUnconnected[hashKey[i]] = this.relManager.cis[hashKey[i]];
+
+					//Store parent key in "checkForUnconnected" object
+					this.checkForUnconnected[parentObjKeys[j]] = ciRelObj;
+				}
+			}
+		}
+
+		this.log.info("[filterRelationsOutOfScope] checkForUnconnected hash :  " + JSON.stringify(this.checkForUnconnected));
+		this.log.debug("[filterRelationsOutOfScope] End");
+	},
+
+	/**SNDOC
+		@name getDecommissionedCICount
+		@description 
+		@author ATF2
+		@returns {Number} decommissionedCICount
+		*/
+	getDecommissionedCICount: function () {
+		return this.decommissionedCICount;
+	},
+
+	/**SNDOC
+		@name getOutOfScopeCIRelCount
+		@description 
+		@author ATF2
+		@returns {Number} outOfScopeCIRelCount
+		*/
+	getOutOfScopeCIRelCount: function () {
+		return this.outOfScopeCIRelCount;
+	},
+
+	/**SNDOC
+		@name getRemovedUnconnectedCICount
+		@description 
+		@author ATF2
+		@returns {Number} removedUnconnectedCICount
+		*/
+	getRemovedUnconnectedCICount: function () {
+		return this.removedUnconnectedCICount;
+	},
+
+
+
+	type: 'CIRelationManagerFilterImport'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>47c9783cdbcaf78024d2bb1a6896193d</sys_id>
+        <sys_mod_count>87</sys_mod_count>
+        <sys_name>CIRelationManagerFilterImport</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_47c9783cdbcaf78024d2bb1a6896193d</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-27 14:21:43</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_app_module">
+    <sys_app_module action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <application display_value="RTSM">996a95396fc9a50099d51abf1e3ee4f1</application>
+        <assessment/>
+        <device_type/>
+        <filter table="sysauto">sys_scope=35d6a18cdb631010689c22d40596190f^name=CI Tree SP CMDB Data Import^EQ<item display_table="sys_scope" display_value="RTSM" endquery="false" field="sys_scope" goto="false" newquery="false" operator="=" or="false" value="35d6a18cdb631010689c22d40596190f"/>
+            <item endquery="false" field="name" goto="false" newquery="false" operator="=" or="false" value="CI Tree SP CMDB Data Import"/>
+            <item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/>
+        </filter>
+        <hint/>
+        <homepage/>
+        <image/>
+        <link_type>LIST</link_type>
+        <map_page/>
+        <mobile_title>Components</mobile_title>
+        <mobile_view_name>Mobile</mobile_view_name>
+        <name>sysauto</name>
+        <order>820</order>
+        <override_menu_roles>false</override_menu_roles>
+        <query/>
+        <report/>
+        <roles>admin</roles>
+        <sys_class_name>sys_app_module</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-06-14 08:26:57</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>3d7076a41b34b01051d64261cd4bcb54</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>CMDB Query Jobs</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_app_module_3d7076a41b34b01051d64261cd4bcb54</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-21 08:01:18</sys_updated_on>
+        <timeline_page/>
+        <title>CMDB Query Jobs</title>
+        <uncancelable>false</uncancelable>
+        <view_name/>
+        <window_name/>
+    </sys_app_module>
+</record_update>

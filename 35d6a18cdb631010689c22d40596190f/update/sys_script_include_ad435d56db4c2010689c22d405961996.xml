@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.DatabaseSemaphore</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>/**&#13;
+ *   Product: Service Event Management&#13;
+ *   Application: ServiceEvent&#13;
+ *   Component: DatabaseSemaphore&#13;
+ *   Functions: lock, unlock, cleanOrphanLocks, _insertDatabaseSemaphore, _isLocked&#13;
+ *   Tables Accessed: u_database_semaphore&#13;
+ *   Which objects call this Script Include: N/A&#13;
+ *   Purpose: Script lock, unlock access to sysnc objects, clean orphan locks&#13;
+ *   Ref: ASN-3449&#13;
+ *   Change logs: 09/13/2018 - Initial Version&#13;
+ *   Limitations: N/A&#13;
+ *   Required dependencies with version: GSLog, global.GlobalScopeUtils&#13;
+ */</description>
+        <name>DatabaseSemaphore</name>
+        <script><![CDATA[/**SNDOC
+    @name DatabaseSemaphore
+    @description Tool for controlling access to a shared resource by multiple functions.
+    @domain Utilities
+    @author Thomas Grensemann
+    @version 1.0.0
+    */
+var DatabaseSemaphore = Class.create();
+DatabaseSemaphore.prototype = {
+
+    /**SNDOC
+        @name initialize
+        @description 
+        @author ATF2
+        @param  {String} [syncObject] - Object to synchronize for. E.g. this can be sys_id of the object, which calculation should be synchronized.
+        @param  {String} [domain] - Used for domain separation
+        @param  {String} [functionality] - Contains the name of the functionality. E.g. this can map to the Script Include name using the semaphore
+        @param  {String} [duration] - sleep duration
+        @returns {String} 
+        */
+    initialize: function (syncObject, domain, functionality, duration) {
+
+        this.syncObject = syncObject;
+
+        if (!domain) {
+            this.domain = '';
+        } else {
+            this.domain = domain;
+        }
+
+        this.functionality = functionality;
+        this.duration = duration;
+
+        this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "DatabaseSemaphore");	
+    },
+
+
+    /**SNDOC
+        @name lock
+        @description Trys to insert a new record into the x_atpu_rtsm_database_semaphore table. 
+        @author ATF2
+        @returns {String} sys_id of the new record or null
+        */
+    lock: function () {
+
+        var result = null;
+
+        while (true) {
+            var locked = this._isLocked(this.syncObject, this.functionality);
+            if (!locked) {
+                result = this._insertDatabaseSemaphore(this.syncObject, this.domain, this.functionality);
+                if (result) {
+                    break;
+                }
+            }
+            global.RTSMGlobalScopeUtils.sleep(this.duration);
+        }
+
+        this.log.debug("[lock] successfully locked: " + this.syncObject + " : " + this.functionality);
+
+        return result;
+    },
+
+    /**SNDOC
+        @name unlock
+        @description Deletes a record from the database_semaphore table where syncObject and functionality match repective properties in this
+        @author ATF2
+        @returns {Boolean} true, if action was successful
+        */
+    unlock: function () {
+
+        var databaseSemaphore = new GlideRecord('x_atpu_rtsm_database_semaphore');
+        databaseSemaphore.addQuery('sync_object', this.syncObject);
+        databaseSemaphore.addQuery('functionality', this.functionality);
+        databaseSemaphore.query();
+
+        if (databaseSemaphore.next()) {
+
+            var deleteRecord = databaseSemaphore.deleteRecord();
+
+            this.log.debug("[unlock] successfully unlocked: " + this.syncObject + " : " + this.functionality + ' delete=' + deleteRecord);
+
+            return deleteRecord;
+        }
+    },
+
+
+    /**
+     * 
+     * @param {String} functionality => 
+     * @param {String} property => Contains the name of System Property. System Property has a time defined in seconds. The time from the system property is used to filter orphan records  
+     * @return {String}, List of orphan records deleted from the table
+     */
+
+    /**SNDOC
+        @name cleanOrphanLocks
+        @description Deletes orphan records from the database_semaphore table
+        @author ATF2
+        @param  {String} [functionality] - Contains the name of the functionality. 
+        @returns {String} List of orphan records deleted from the table
+        */
+    cleanOrphanLocks: function (functionality) {
+
+        var diffSeconds = 0;
+        var orphanRecords = [];
+        var n = 0;
+        var orphanTime = new RTSMUtil().getProperty(RTSMConst.citreesp_semaphore_orphan_time, 120)
+
+        if (orphanTime && functionality) {
+            var grDelOrphan = new GlideRecord('x_atpu_rtsm_database_semaphore');
+            grDelOrphan.addQuery('functionality', functionality);
+            grDelOrphan.query();
+
+            while (grDelOrphan.next()) {
+                // // AR dateDiff not in Scoped App
+                // var currentTime = new GlideDateTime();
+                // diffSeconds = gs.dateDiff(grDelOrphan.sys_created_on, currentTime, true);
+                diffSeconds = GlideDateTime.subtract(new GlideDateTime(grDelOrphan.sys_created_on), new GlideDateTime()).getNumericValue();	
+
+                if (diffSeconds > orphanTime) {
+                    orphanRecords.push(grDelOrphan.sync_object.toString());
+                    grDelOrphan.deleteRecord();
+                    n++;
+                }
+            }
+            if (n > 0) {
+                orphanRecords = orphanRecords.join(",");
+                this.log.debug("[cleanOrphanLocks] Number of orphan records deleted: " + n + ", Orphan records deleted: " + orphanRecords);
+            }
+        }
+        return orphanRecords;
+    },
+
+    /**SNDOC
+        @name _insertDatabaseSemaphore
+        @private
+        @description Inserts a new entry into the database_semaphore.
+        @author ATF2
+        @param  {String} [syncObject] - Object to synchronize for. E.g. this can be sys_id of the object, which calculation should be synchronized.
+        @param  {String} [domain] - Used for domain separation
+        @param  {String} [functionality] - Contains the name of the functionality. E.g. this can map to the Script Include name using the semaphore
+        @returns {String} sys_id of the new record or null
+        */
+    _insertDatabaseSemaphore: function (syncObject, domain, functionality) {
+
+        var databaseSemaphore = new GlideRecord('x_atpu_rtsm_database_semaphore');
+        databaseSemaphore.initialize();
+        databaseSemaphore.sync_object = syncObject;
+        databaseSemaphore.sys_domain = domain;
+        databaseSemaphore.functionality = functionality;
+
+        var insert = databaseSemaphore.insert();
+
+        this.log.debug("[_insertDatabaseSemaphore] successfully unlocked: " + syncObject + " : " + domain + " : " + functionality + ' insert=' + insert);
+
+        return insert;
+
+    },
+
+    /**
+     * 
+     *
+     * @param {String} syncObject => 
+     * @param {String} functionality => 
+     *                            
+     * @returns {string} locked => true if syncObject is available
+     *                   
+     * @private
+     */
+    /**SNDOC
+        @name _isLocked
+        @description Checks if a syncObject is available (not locked).
+        @author ATF2
+        @param  {String} [syncObject] - Object to synchronize for. E.g. this can be sys_id of the object, which calculation should be synchronized.
+        @param  {String} [functionality] - Contains the name of the functionality. E.g. this can map to the Script Include name using the semaphore
+        @returns {Boolean} locked => true if syncObject is available
+        */
+    _isLocked: function (syncObject, functionality) {
+        var locked = false;
+
+        var count = new GlideAggregate('x_atpu_rtsm_database_semaphore');
+        count.addQuery('sync_object', syncObject);
+        count.addQuery('functionality', functionality);
+        count.query();
+
+        if (count.next()) {
+            locked = true;
+        }
+
+        this.log.debug("[_isLocked] is locked: " + this.syncObject + " : " + this.functionality + ' locked=' + locked);
+
+        return locked;
+    }
+
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>hendrik.muller</sys_created_by>
+        <sys_created_on>2020-10-26 09:11:46</sys_created_on>
+        <sys_id>ad435d56db4c2010689c22d405961996</sys_id>
+        <sys_mod_count>8</sys_mod_count>
+        <sys_name>DatabaseSemaphore</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_ad435d56db4c2010689c22d405961996</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-14 05:24:48</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="run_time" label="Run Time" language="en" table="x_atpu_rtsm_citreesp_cmdb_query_registry_import_results">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>run_time</element>
+            <help/>
+            <hint/>
+            <label>Run Time</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_cmdb_query_registry_import_results</name>
+            <plural>Run Times</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:58</sys_created_on>
+            <sys_id>968299a91b427010e5f386a3604bcb7c</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Run Time</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_citreesp_cmdb_query_registry_import_results_run_time_en</sys_update_name>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:58</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="SubGraph Log" max_length="40" name="x_atpu_rtsm_subgraph_log" type="collection">
+        <element label="BRIDGE Count Edges" max_length="40" name="bridge_count_edges" read_only="true" type="integer"/>
+        <element label="Bridge Count Vertices" max_length="40" name="bridge_count_vertices" read_only="true" type="integer"/>
+        <element label="Connectors" max_length="5000" name="connectors" read_only="true" type="string"/>
+        <element label="Count Edges" mandatory="true" max_length="40" name="countedges" read_only="true" type="integer"/>
+        <element label="Count Vertices" mandatory="true" max_length="40" name="countvertices" read_only="true" type="integer"/>
+        <element label="ctxObjId" max_length="32" name="ctxobjid" read_only="true" reference="cmdb_ci" type="reference"/>
+        <element label="Detected Loops" max_length="40" name="detected_loops" read_only="true" type="integer"/>
+        <element label="direction" max_length="40" name="direction" read_only="true" type="string"/>
+        <element label="Duration" max_length="40" name="duration" read_only="true" type="integer"/>
+        <element label="Edges" max_length="10000000" name="edges" read_only="true" type="string"/>
+        <element label="endTime" max_length="40" name="endtime" read_only="true" type="string"/>
+        <element label="Graph" max_length="10000000" name="graph" read_only="true" type="string"/>
+        <element label="Graph Size" mandatory="true" max_length="40" name="graphsize" read_only="true" type="integer"/>
+        <element label="idSpace" max_length="40" name="idspace" read_only="true" type="string"/>
+        <element label="ITOM Count Edges" max_length="40" name="itom_count_edges" read_only="true" type="integer"/>
+        <element label="ITOM Count Vertices" max_length="40" name="itom_count_vertices" read_only="true" type="integer"/>
+        <element label="Log level" max_length="40" name="level" read_only="true" type="string"/>
+        <element label="limit" mandatory="true" max_length="40" name="limit" read_only="true" type="integer"/>
+        <element label="Max Depth" mandatory="true" max_length="40" name="maxdepth" read_only="true" type="integer"/>
+        <element label="Max Severity" mandatory="true" max_length="40" name="maxseverity" read_only="true" type="integer"/>
+        <element label="Max Graph Depth Inbound" max_length="40" name="max_graph_depth_inbound" read_only="true" type="integer"/>
+        <element label="Max Graph Depth Outbound" max_length="40" name="max_graph_depth_outbound" read_only="true" type="integer"/>
+        <element default="javascript:getNextObjNumberPadded();" dynamic_default_value="fdcb83a85f220100a9ad2572f2b4773c" label="Number" mandatory="true" max_length="40" name="number" read_only="true" type="string" unique="true" use_dynamic_default="true"/>
+        <element label="Result" max_length="50000" name="result" read_only="true" type="string"/>
+        <element label="Result Code" max_length="100" name="result_code" read_only="true" type="string"/>
+        <element label="Result Message" max_length="2000" name="result_message" read_only="true" type="string"/>
+        <element label="Shared" max_length="1000000" name="shared" read_only="true" type="string"/>
+        <element label="Start Time" max_length="40" name="starttime" read_only="true" type="glide_date_time"/>
+        <element label="tag" max_length="40" name="tag" type="string"/>
+        <element label="timeout" max_length="40" name="timeout" read_only="true" type="longint"/>
+        <element label="Traverse all domains" max_length="40" name="traverse_all_domains" read_only="true" type="boolean"/>
+        <element label="vertices" max_length="10000000" name="vertices" read_only="true" type="string"/>
+        <index name="index">
+            <element name="number"/>
+        </index>
+        <index name="index2">
+            <element name="ctxobjid"/>
+        </index>
+    </element>
+</database>

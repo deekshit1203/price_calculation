@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="is_default_domain" label="Is Default Domain" language="en" table="x_atpu_rtsm_rtsm_domain">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>is_default_domain</element>
+            <help/>
+            <hint/>
+            <label>Is Default Domain</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_rtsm_domain</name>
+            <plural>Is Default Domains</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-02-22 10:53:52</sys_created_on>
+            <sys_id>798299a91b427010e5f386a3604bcb00</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Is Default Domain</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_rtsm_domain_is_default_domain_en</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-02-22 10:53:52</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

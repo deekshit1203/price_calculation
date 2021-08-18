@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CSAlwaysCalculator</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Implementation of CI Tree SP - CS Always Calculator </description>
+        <name>CSAlwaysCalculator</name>
+        <script><![CDATA[/**SNDOC
+	@name CSAlwaysCalculator
+	@description Impact Calculation
+	@domain Impact Calculation
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CSAlwaysCalculator = Class.create();
+CSAlwaysCalculator.prototype = {
+	/**SNDOC
+		@name initialize
+		@description 
+		*/
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CSAlwaysCalculator");
+		this.ops = RTSMConst.QO;
+	},
+
+	/**SNDOC
+		@name calc
+		@description call Calc function when connection strength is 'Always'
+		@param {Object} [ciRelParCi] - the Relation to the parent CI  
+		@param {Number} [opType] -  the operation. A member of RTSMConst.QO
+		@param {*} [evtObj] -
+		@param {*} [ciObj] -  
+		@param {*} [clusCalFlag] -  
+		*/
+	calc: function (ciRelParCi, opType, evtObj, ciObj, clusCalFlag) {
+		//alert CI = child CI
+		
+		//calc impact of parent ci
+		//HN notes: ciRelParCi gr x_atpu_rtsm_rtsm_cmdb_rel_ci
+		//evtObj : em_alert
+		//opType: "createAlert": 10, "updateAlert": 20, "resolveAlert": 30, "recalcCI": 60
+		this.ciRelPar = ciRelParCi;
+		
+		//this.ciRelParSysId = this.ciRelPar.parent.toString();
+		//this.ciRelChdSysId = this.ciRelPar.child.toString();
+		
+		this.ciRelParSysId = this.ciRelPar.parent.sys_id;
+		this.ciRelChdSysId = this.ciRelPar.child.sys_id;
+		
+		
+		//Set below member variable for Logging
+		this.parCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', this.ciRelParSysId, 'name');
+		this.chdCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', this.ciRelChdSysId, 'name');
+
+		
+		this.logPrefix =
+			opType +
+			"_" +
+			(opType == this.ops.recalcCI ? ciObj.getDisplayValue() : evtObj.getDisplayValue()) +
+			"_" +
+			this.parCIName +
+			"<-" +
+			this.chdCIName +
+			": ";
+		this.log.debug(this.logPrefix + "Start calc");
+
+		this.operationType = parseInt(opType, 10);
+		this.alertObj = evtObj;
+		this.ciobject = ciObj;
+		this.clustercalFlag = clusCalFlag;
+		this.log.debug(this.logPrefix + "ClusterFlag: " + clusCalFlag);
+		var result = null;
+
+		//check if parent CI SP record exists, if not, create parent CI SP record
+		this.parCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		this.parCITreeSPRec.addQuery('alert_ci', this.ciRelParSysId);
+		this.parCITreeSPRec.query();
+
+		if (!this.parCITreeSPRec.next()) {
+			//Self Healing if entry on the CI Tree SP table is missing for this CI
+			this.log.info(this.logPrefix + "adding missing CI Tree SP of parent");
+			var ciTreeSP = new CITreeSP();
+			ciTreeSP.addSP(this.ciRelParSysId, false);
+
+			this.parCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+			this.parCITreeSPRec.addQuery('alert_ci', this.ciRelParSysId);
+			this.parCITreeSPRec.query();
+
+			if (!this.parCITreeSPRec.next()) {
+				return true;
+			}
+		}
+
+		//remember parent CI SP potential state
+		this.oldSPState = parseInt(this.parCITreeSPRec.state_potential.toString());
+
+		
+		//check if child CI SP record exists, if not, create it
+		this.childCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		this.childCITreeSPRec.addQuery('alert_ci', this.ciRelChdSysId);
+		this.childCITreeSPRec.query();
+		if (!this.childCITreeSPRec.next()) {
+			//Self Healing if entry on the CI Tree SP table is missing for this CI
+			this.log.info(this.logPrefix + "adding missing CI Tree SP of child");
+			ciTreeSP = new CITreeSP();
+			var ciHelper = new CIHelper();
+			var isRoot = ciHelper.isRootCI(this.ciRelChdSysId);
+			ciTreeSP.addSP(this.ciRelChdSysId, isRoot);
+
+			this.childCITreeSPRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+			this.childCITreeSPRec.addQuery('alert_ci', this.ciRelChdSysId);
+			this.childCITreeSPRec.query();
+
+			if (!this.childCITreeSPRec.next()) {
+				return true;
+			}
+		}
+
+		//recalculate UPSTREAM STATE if need
+		//RECAL upstream state IF:
+		// ops is RECALCCI and CHILD is ROOT ci
+		// OR
+		// not recalcci ops and ALERT is on CHILD ci
+		// CURRENTLY: upstream state is cal using UNIQUELY state_potential (in most case: upsteam state = potential state)
+		if (
+			(this.operationType == this.ops.recalcCI) &&
+			this.childCITreeSPRec.is_root_ci // addCI/recalcCI: child is root ci
+			||
+			this.operationType != this.ops.recalcCI && this.ciRelChdSysId == evtObj.cmdb_ci // incoming alert on child 
+		) { // => upstream state of child needs recalculation
+			//this.log.info(this.logPrefix + "calc: (Before) calculated upstream state of Child [" + this.childCITreeSPRec.alert_ci.getDisplayValue() + "] is: " + this.childCITreeSPRec.upstream_state + ", Is Valid= " + this.childCITreeSPRec.is_valid);
+
+			var csCalcHelper = new CSCalcHelper();
+			csCalcHelper.calcUpstreamState(this.childCITreeSPRec);
+			this.childCITreeSPRec.update();
+
+			//this.log.info(this.logPrefix + "calc: (After) calculated upstream state of Child [" + this.childCITreeSPRec.alert_ci.getDisplayValue() + "] is: " + this.childCITreeSPRec.upstream_state + ", Is Valid= " + this.childCITreeSPRec.is_valid);
+		}
+		
+		
+		//Run the right impact calcul according to operation type
+		// /!\ calc function does NOT update SP record, update is done later in this function
+		switch (this.operationType) {
+			case this.ops.createAlert:
+				result = this.calcCreate();
+				this.log.info(this.logPrefix + "calc: calcCreate result (CI State): " + result.state_potential.getDisplayValue());
+				break;
+			case this.ops.updateAlert:
+				result = this.calcUpdate();
+				this.log.info(this.logPrefix + "calc: calcUpdate result (CI State): " + result.state_potential.getDisplayValue());
+				break;
+			case this.ops.resolveAlert:
+				result = this.calcResolve();
+				this.log.info(this.logPrefix + "calc: calcResolve result (CI State): " + result.state_potential.getDisplayValue());
+				break;
+			case this.ops.recalcCI:
+				result = this.recalcCI();
+				this.log.info(this.logPrefix + "calc: recalcCI result (CI State): " + result.state_potential.getDisplayValue());
+				break;
+			default:
+				this.log.error(this.logPrefix + "calc: Unsupported operation type");
+				return false;
+		}
+
+		this.parCITreeSPRec = result;
+		this.parCITreeSPRec.update(); // /!\ calc function does NOT update SP record, update is done here
+
+		this.log.debug('End calc');
+		return true;
+	},
+
+	/**SNDOC
+		@name calcCreate
+		@description still unclear
+		*/
+	calcCreate: function () {
+		//only used by this script include, name change pending _calcCreate
+		this.log.debug('Start calcCreate');
+
+		var calcChildCIResult = null;
+
+		var state_ci_tree_sp_parent_old = this.parCITreeSPRec.getValue("state_potential");
+
+		/*
+		//state POTENTIAL
+		if (parseInt(this.parCITreeSPRec.state_potential) != RTSMConst.CITREE_STATE_OUTAGE) {
+			this.log.info(this.logPrefix + "calcCreate: parent CI CI Tree SP state is not outage");
+			if (this.clustercalFlag == false) {
+				//NOT CLUSTER calc
+				this.log.info(this.logPrefix + "calcCreate: clustercalFlag is false");
+				//Alert type is obsolete
+				if (this.alertObj.alert_type == 'AVAILABILITY') {
+					this.log.info(this.logPrefix + "calcCreate: Alert type is Availabilty");
+					this.parCITreeSPRec.state_potential = RTSMConst.CITREE_STATE_OUTAGE;
+					this.parCITreeSPRec.upstream_state = RTSMConst.CITREE_STATE_OUTAGE;
+				} else if (parseInt(this.parCITreeSPRec.state_potential) == RTSMConst.Severity_OK) {
+					//change parent state from OK to at risk
+					// ???
+					this.log.info(this.logPrefix + "calcCreate: Parent CI state is OK");
+					this.parCITreeSPRec.state_potential = RTSMConst.Severity_Warning; 
+				}
+			} else {
+				//hng note: ignore this code, will never happen in an always conenction. pending delete
+				//CLUSTER calc
+				// take worse state between child upsteam and parent potential
+				this.log.info(this.logPrefix + "calcCreate: calculate child CI status: ");
+				calcChildCIResult = parseInt(this.childCITreeSPRec.upstream_state);
+				this.log.info(this.logPrefix + "calcCreate: clustercalFlag is true");
+				if (calcChildCIResult > parseInt(this.parCITreeSPRec.state_potential)) {
+					this.parCITreeSPRec.state_potential = calcChildCIResult + "";
+				}
+			}
+		}
+		*/
+
+		//When we received an alert, update parent CI potential state
+		var parent_potential = parseInt(this.parCITreeSPRec.getValue('state_potential'));
+		var alert_severity = parseInt(this.alertObj.getValue('severity'));
+		if (parent_potential) {
+			if (alert_severity) {
+				parent_potential = (parent_potential < alert_severity ? parent_potential : alert_severity);
+			}
+		} else {
+			parent_potential = alert_severity;
+		}
+		this.parCITreeSPRec.setValue('state_potential', parent_potential.toString());
+
+		this.log.info(this.logPrefix + 'calcCreate: CI tree SP state of the child CI: ' + this.childCITreeSPRec.state_potential);
+		this.log.info(this.logPrefix + 'calcCreate: Upstream state of the child is: ' + calcChildCIResult + '. State of parent CI is: ' + this.parCITreeSPRec.state_potential);
+
+		var csCalcHelper = new CSCalcHelper();
+		csCalcHelper.calcUpstreamState(this.parCITreeSPRec);
+
+
+
+		this.log.info(this.logPrefix + 'calcCreate: Update details result : ' + updtDetails);
+		this.log.debug('End calcCreate: ' + this.ciRelParSysId);
+		return updtDetails;
+	},
+
+	/**SNDOC
+		@name calcAddCI
+		@description 
+		*/
+	calcAddCI: function () {
+		//add _ , only used by this.recalcCI()
+		this.log.debug('Start calcAddCI');
+
+		var state_ci_tree_sp_parent_old = this.parCITreeSPRec.getValue("state_potential");
+
+		var calcChildCIResult = parseInt(this.childCITreeSPRec.upstream_state);
+
+		this.log.info(this.logPrefix + 'calcAddCI: Upstream state of the child is : ' + calcChildCIResult);
+
+		/*
+		//OLD ATF2
+		//Upstream state of Child worse than Parent CI state
+		if (calcChildCIResult > parseInt(this.parCITreeSPRec.state_potential)) {
+			this.parCITreeSPRec.state_potential = calcChildCIResult + ""; // to avoid issue adding decimal digit ".0" when using parseInt, convert to string before storing to db
+			this.log.info(this.logPrefix + 'calcAddCI: state of the Parent is : ' + this.parCITreeSPRec.state_potential);
+		}
+		*/
+		
+		//keep the worse value better child upstream state and parent potential
+		var parent_potential = parseInt(this.parCITreeSPRec.getValue('state_potential'));
+		if (parent_potential) {
+			if (calcChildCIResult) {
+				parent_potential = (parent_potential < calcChildCIResult ? parent_potential : calcChildCIResult);
+			}
+		} else {
+			parent_potential = calcChildCIResult;
+		}
+		this.parCITreeSPRec.setValue('state_potential', parent_potential + ''); // convert to string to avoid issue adding decimal digit ".0"
+
+		this.log.info(this.logPrefix + 'calcAddCI: state of the Child CI is : ' + this.childCITreeSPRec.state_potential);
+
+		var csCalcHelper = new CSCalcHelper();
+		csCalcHelper.calcUpstreamState(this.parCITreeSPRec);
+
+
+		//Call	CalcHelper UpdateDetails to update CI Tree SP record of the Parent CI
+		var updtDetails = new CSCalcHelper().updateDetails(this.parCITreeSPRec);
+
+		this.log.info(this.logPrefix + 'calcAddCI: Update details result : ' + updtDetails);
+		this.log.debug('End calcAddCI: ' + this.ciRelChdSysId);
+		return updtDetails;
+	},
+
+	/**SNDOC
+		@name calcAllChildCIStatus
+		@description 
+		*/
+	calcAllChildCIStatus: function (ciTreeSPCI) {
+		this.log.debug(this.logPrefix + 'Start calcAllChildCIStatus: ' + ciTreeSPCI);
+		var tempstate = 0;
+		var ciBranchIds = [];
+		
+		
+		var childCIs = new CIHelper().getChildCIs(this.ciRelParSysId);
+		this.log.info("HNG test parent ci: " + this.ciRelParSysId);
+		
+		this.log.info(this.logPrefix + 'calcAllChildCIStatus: child CIs : ' + childCIs);
+		
+		var emAlerts = new GlideRecord('em_alert');
+		emAlerts.addQuery('cmdb_ci', 'IN', childCIs);
+		emAlerts.addQuery('state', '!=', 'Closed');
+		emAlerts.orderBy('type');
+		emAlerts.query();
+
+		while (emAlerts.next()) {
+			ciBranchIds.push(emAlerts.cmdb_ci.toString());
+		}
+		
+		this.log.info(this.logPrefix + 'calcAllChildCIStatus: CI Branch records : ' + ciBranchIds);
+		if (ciTreeSPCI) {
+			ciBranchIds.push(ciTreeSPCI.toString());
+		}
+
+		var arrayUtil = new global.ArrayUtil();
+		ciBranchIds = arrayUtil.unique(ciBranchIds);
+		this.log.info(this.logPrefix + 'calcAllChildCIStatus: CI Branch unique records : ' + ciBranchIds);
+
+		var worstChildState = new CSCalcHelper().calcWorstChildCIStatus(ciBranchIds);
+
+		this.log.info(this.logPrefix + 'calcAllChildCIStatus: Worst Child CI States result : ' + worstChildState);
+		this.log.debug(this.logPrefix + 'End calcAllChildCIStatus: ' + ciTreeSPCI);
+		return worstChildState;
+	},
+
+	/**SNDOC
+		@name calcUpdate
+		@description 
+		*/
+	calcUpdate: function ( /*updtAlert*/ ) {
+		this.log.debug('Start calcUpdate');
+
+		var state_ci_tree_sp_parent_old = this.parCITreeSPRec.getValue("state_potential");
+		var worstChildUpstreamState;
+		var calWorstChildCIState;
+
+		/*
+		//ATF2 old
+		if (this.clustercalFlag == false) {
+			//Alert type is obsolete
+			if (this.alertObj.alert_type == 'AVAILABILITY') {
+				this.parCITreeSPRec.state_potential = RTSMConst.CITREE_STATE_OUTAGE;
+				this.parCITreeSPRec.upstream_state = RTSMConst.CITREE_STATE_OUTAGE;
+
+				this.log.info(this.logPrefix + 'calcUpdate: Parent CI State is Outage for the CI: ' + this.parCITreeSPRec.alert_ci);
+			} else {
+				//
+			}
+			//hng todo: check calcAllChildCIStatus
+			calWorstChildCIState = this.calcAllChildCIStatus(this.ciRelChdSysId);
+			this.parCITreeSPRec.state_potential = calWorstChildCIState + "";
+			this.log.info(this.logPrefix + 'calcUpdate: 1 calculated worst state of all Child CI to Parent CI State : ' + calWorstChildCIState);
+			var csCalcHelper = new CSCalcHelper();
+			csCalcHelper.calcUpstreamState(this.parCITreeSPRec);
+		} else {
+			//hng todo: obsolete, pending remove
+			calWorstChildCIState = this.calcAllChildCIStatus(this.ciRelChdSysId);
+			this.parCITreeSPRec.state_potential = calWorstChildCIState + ""; // before storing, convert to string - else ParseInt will add a decimal ".0"
+			this.log.info(this.logPrefix + 'calcUpdate: 2 calculated worst state of all Child CI to Parent CI State : ' + calWorstChildCIState);
+			csCalcHelper = new CSCalcHelper();
+			csCalcHelper.calcUpstreamState(this.parCITreeSPRec);
+		}
+		*/
+		
+		//hng todo: check calcAllChildCIStatus
+		calWorstChildCIState = this.calcAllChildCIStatus(this.ciRelChdSysId);
+		this.parCITreeSPRec.state_potential = calWorstChildCIState + "";
+		this.log.info(this.logPrefix + 'calcUpdate: 1 calculated worst state of all Child CI to Parent CI State : ' + calWorstChildCIState);
+		var csCalcHelper = new CSCalcHelper();
+		csCalcHelper.calcUpstreamState(this.parCITreeSPRec);
+
+		//Get the worst ChildCI Upstream State
+		//worstChildUpstreamState = (this.parCITreeSPRec.upstream_state == RTSMConst.CITREE_STATE_OUTAGE ? RTSMConst.CITREE_STATE_OUTAGE : calWorstChildCIState); //not used
+
+
+		var updtDetails = new CSCalcHelper().updateDetails(this.parCITreeSPRec);
+
+		this.log.info(this.logPrefix + 'calcUpdate: Update details result : ' + updtDetails);
+		this.log.debug(this.logPrefix + 'End calcUpdate');
+		
+		return updtDetails;
+	},
+
+	/**SNDOC
+		@name calcResolve
+		@description 
+		*/
+	calcResolve: function () {
+		this.log.debug('Start calcResolve');
+
+		//Check if "parCITreeSPRec" object is Null inside calcResolve function
+		if (!this.parCITreeSPRec) {
+			this.log.info(this.logPrefix + 'Object [parCITreeSPRec] is Null');
+		}
+
+		var state_ci_tree_sp_parent_old = this.parCITreeSPRec.state_potential;
+		var childStatus = this.calcAllChildCIStatus();
+		
+		this.parCITreeSPRec.state_potential = childStatus + ""; // before storing, convert to string - else ParseInt will add a decimal ".0"		
+		this.log.info(this.logPrefix + 'calcResolve: All child CI status result: ' + childStatus);
+		
+		var csCalcHelper = new CSCalcHelper();
+		csCalcHelper.calcUpstreamState(this.parCITreeSPRec);
+
+
+		this.log.info(this.logPrefix + 'calcResolve: Update details result: ' + updtDetails);
+
+		this.log.debug(this.logPrefix + 'End calcResolve');
+
+		return updtDetails;
+	},
+
+	/**SNDOC
+		@name recalcCI
+		@description 
+		*/
+	recalcCI: function () {
+		this.log.debug('Start recalcCI');
+		//this.log.info(this.logPrefix + "recalcCI: CI [" + this.parCITreeSPRec.alert_ci.getDisplayValue() + "] , Upstream State: " + this.parCITreeSPRec.upstream_state);
+
+		//recalculate the CI if not already calculated
+		if (this.parCITreeSPRec.is_valid == false) {
+			new CSCalcHelper().resetCI(this.parCITreeSPRec);
+			this.parCITreeSPRec.setValue('is_valid', true);
+		}
+
+		var addCi = this.calcAddCI();
+		this.log.debug('End recalcCI');
+
+		return addCi;
+
+	},
+
+	type: 'CSAlwaysCalculator'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>a77e35a6dbed2380f19e6def4b961937</sys_id>
+        <sys_mod_count>224</sys_mod_count>
+        <sys_name>CSAlwaysCalculator</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_a77e35a6dbed2380f19e6def4b961937</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 06:00:17</sys_updated_on>
+    </sys_script_include>
+</record_update>

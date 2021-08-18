@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name/>
+        <active>true</active>
+        <client>false</client>
+        <client_script_v2><![CDATA[function onClick(g_form) {
+
+}]]></client_script_v2>
+        <comments/>
+        <condition/>
+        <form_action>true</form_action>
+        <form_button>true</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>false</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style/>
+        <hint/>
+        <isolate_script>false</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <list_style/>
+        <messages/>
+        <name>Find Errors</name>
+        <onclick/>
+        <order>1000</order>
+        <script><![CDATA[function _convertDate(date) {
+    return "javascript:gs.dateGenerate('" + date.replace(" ","','") + "')";
+}
+
+try {
+	var grSysEvent = new GlideRecord("sysevent");
+	grSysEvent.addQuery("name", "x_atpu_rtsm.citreesp_queue_handler");
+	grSysEvent.addQuery("table", "x_atpu_rtsm_citreesp_queue");
+	grSysEvent.addQuery("instance", current.sys_id);
+	grSysEvent.orderByDesc("sys_created_on");
+	grSysEvent.query();
+
+	//TODO Cross Scope Policy Violation
+	gs.info('[RTSM UI Action Find Errors]: TODO Cross Scope Policy' + ' # ' + grSysEvent.getRowCount() +  ' /[' + grSysEvent.getTableName() + ']/ ' + grSysEvent.getEncodedQuery());
+		   
+	if (grSysEvent.next()) {
+		gs.addInfoMessage('Open <a href="nav_to.do?uri=' + escape('sysevent.do?sysparm_query=sys_id=' + escape(grSysEvent.sys_id)) + '" target="_blank">' + "related system alert" + '</a>');		
+		
+		if (grSysEvent.state != "processed") {
+			gs.addErrorMessage("SysEvent not completed"); 
+			action.setRedirectURL(current);
+		}
+		else {
+			var addSeconds = grSysEvent.processing_duration / 1000;
+			addSeconds = addSeconds.toString().split(".")[0];
+			var startDate = new GlideDateTime(grSysEvent.processed);
+			var stopDate = new GlideDateTime(grSysEvent.processed);
+			stopDate.addSeconds(addSeconds + 1);
+
+			var url = "syslog_list.do?sysparm_query=" + encodeURIComponent(
+				   "sys_created_on>=" + _convertDate(startDate.getDisplayValue())
+				+ "^sys_created_on<=" + _convertDate(stopDate.getDisplayValue())
+				+ "^source=Evaluator^ORsource=com.glide.ui.ServletErrorListener"
+				+ "^sys_created_by=" + grSysEvent.sys_created_by
+			);
+
+			// gs.addErrorMessage(url); 
+			action.setRedirectURL(url);
+		}
+	}
+	else {
+		gs.addErrorMessage("Alert not found on table sysevent"); 
+	}
+}
+catch (e) {
+	gs.addErrorMessage("error: " + e.message); 
+}
+
+]]></script>
+        <show_insert>false</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>true</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>acf9a47fdb3563c0f19e6def4b96192a</sys_id>
+        <sys_mod_count>52</sys_mod_count>
+        <sys_name>Find Errors</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_ui_action_acf9a47fdb3563c0f19e6def4b96192a</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-03-26 06:39:17</sys_updated_on>
+        <table>x_atpu_rtsm_citreesp_queue</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>false</ui16_compatible>
+    </sys_ui_action>
+</record_update>

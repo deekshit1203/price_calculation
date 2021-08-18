@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sysauto_script">
+    <sysauto_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <business_calendar/>
+        <can_iterate>false</can_iterate>
+        <condition/>
+        <conditional>false</conditional>
+        <entered_time/>
+        <name>CITreeSPHousekeeping</name>
+        <offset/>
+        <offset_type/>
+        <run_as display_value="System Administrator">6816f79cc0a8016401c5a33be04be441</run_as>
+        <run_as_tz/>
+        <run_dayofmonth>1</run_dayofmonth>
+        <run_dayofweek>1</run_dayofweek>
+        <run_period>1970-01-01 00:01:00</run_period>
+        <run_start>2018-12-04 08:47:48</run_start>
+        <run_time>1969-12-31 18:31:00</run_time>
+        <run_type>periodically</run_type>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPHousekeeping
+	@description The scheduled job called the cleanOrphanLocks function to cleanup any orphaned locks that
+	can cause processing to stop.
+	SJ runs regularly every 1 min
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+
+RTSMJobs.sj_CITreeSPHousekeeping();]]></script>
+        <source_filter/>
+        <source_table>cmdb_ci_appl_dot_net</source_table>
+        <sys_class_name>sysauto_script</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>bfc1652b1b86ab405408a9fe6e4bcb14</sys_id>
+        <sys_mod_count>34</sys_mod_count>
+        <sys_name>CITreeSPHousekeeping</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sysauto_script_bfc1652b1b86ab405408a9fe6e4bcb14</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-04 14:43:58</sys_updated_on>
+        <time_zone/>
+        <upgrade_safe>false</upgrade_safe>
+    </sysauto_script>
+</record_update>

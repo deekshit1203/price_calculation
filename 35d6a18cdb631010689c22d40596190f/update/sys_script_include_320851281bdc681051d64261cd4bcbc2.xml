@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.RTSMConst</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Constants for the RTSM application</description>
+        <name>RTSMConst</name>
+        <script><![CDATA[/**SNDOC
+		@name RTSMConst
+		@description Constants
+		@domain Utilities
+		@author andreas.reermann@atos.net
+		@version 1.0.0
+	*/
+var RTSMConst = Class.create();
+RTSMConst.prototype = {
+    initialize: function () {},
+    type: 'RTSMConst'
+};
+
+/**SNDOC
+    @name Log Domains
+    @description Constans for Logging
+	@author andreas.reermann@atos.net
+    */
+RTSMConst.loglevel_default = "loglevel.default";
+RTSMConst.loglevel_cmdb_query_register = "loglevel.cmdb_query_register";
+RTSMConst.loglevel_impact_calculation = "loglevel.impact_calculation";
+RTSMConst.loglevel_impact_tree = "loglevel.impact_tree";
+RTSMConst.loglevel_impact_tree_builder = "loglevel.impact_tree_builder";
+RTSMConst.loglevel_process_queue_manager = "loglevel.process_queue_manager";
+RTSMConst.loglevel_tree_state_persistency = "loglevel.tree_state_persistency";
+RTSMConst.loglevel_utl = "loglevel.utl";
+
+
+/**SNDOC
+    @name Properties
+    @description Constans for BL
+	@author andreas.reermann@atos.net
+    */
+RTSMConst.citreesp_cmdbdataimport_importtimeout = "citreesp_cmdbdataimport_importtimeout";
+RTSMConst.citreesp_cmdbdataimport_user = "citreesp_cmdbdataimport_user";
+RTSMConst.citreesp_cmdbqueryregistry_genericdomainname = "citreesp_cmdbqueryregistry_genericdomainname";
+RTSMConst.citreesp_cmdbdataimport_leftover_wait_time = "citreesp_cmdbdataimport_leftover_wait_time";
+
+RTSMConst.citreesp_max_calc_ci_count = "citreesp_max_calc_ci_count";
+RTSMConst.citreesp_max_calc_runtime = "citreesp_max_calc_runtime";
+RTSMConst.citreesp_max_parallel_processes = "citreesp_max_parallel_processes";
+RTSMConst.citreesp_max_processing_count_per_process = "citreesp_max_processing_count_per_process";
+
+RTSMConst.citreesp_queue_genericdomainname = "citreesp_queue_genericdomainname";
+RTSMConst.citreesp_semaphore_orphan_time = "citreesp_semaphore_orphan_time";
+RTSMConst.citreesp_semaphore_wait_time = "citreesp_semaphore_wait_time";
+RTSMConst.enableCILoopIncident = "enableCILoopIncident";
+
+RTSMConst.subgraph_max_severity = "subgraph_max_severity";
+RTSMConst.subgraph_max_depth = "subgraph_max_depth";
+RTSMConst.subgraph_limit = "subgraph_limit";
+RTSMConst.subgraph_timeout = "subgraph_timeout";
+RTSMConst.subgraph_log_level = "subgraph_log_level";
+RTSMConst.retention_period_short = "retention_period_short";
+RTSMConst.retention_period_long = "retention_period_long";
+
+/**SNDOC
+    @name Switches
+    @description Switches to work around problems concercing global to scoped app
+	@author andreas.reermann@atos.net
+    */
+RTSMConst.ImpersonateForImport = true;
+
+/**SNDOC
+ @name RoleInGroup
+ @description Alert Roles in Alert Groups
+ @author hendrik.mueller@atos.net
+ */
+
+RTSMConst.RoleInGroup_None = 0;
+RTSMConst.RoleInGroup_Primary = 1;
+RTSMConst.RoleInGroup_Secondary = 2;
+
+/**SNDOC
+ @name Manager
+ @description Domain Manager
+ @author hendrik.mueller@atos.net
+ */
+RTSMConst.Manager_Bridge = "BRIDGE";
+RTSMConst.Manager_Itom = "ITOM";
+
+/**SNDOC
+ @name QueueOperations
+ @description The operation types used in queues
+ @author hendrik.mueller@atos.net
+ */
+
+RTSMConst.QO = {
+    "createAlert": 10,
+    "updateAlert": 20,
+    "resolveAlert": 30,
+    "recalcCustomer": 50,
+    "recalcCI": 60,
+    "recalcCustomerLeftover": 70,
+    "cmdbImportCustomers": 80,
+    "cmdbImportCustomerLeftover": 100,
+    "cmdbFilterCustomer": 110,
+    "cmdbChangeDetectionCustomer": 120,
+    "disconnectCIs": 130,
+    "connectCIs": 140,
+    "updateCIRelation": 150,
+    "enableCustomerRTSM": 160,
+    "disableCustomerRTSM": 170
+};
+
+/**SNDOC
+        @name checkOperation
+        @description Checks the type of a CI Tree SP Processing Queue Table object. Returns false if the type is not supported.
+        @author andreas.reermann@atos.net
+        @param  {number} [operation] - Operation from RTSMConst.QO
+        @returns {Boolean} 
+    */
+ RTSMConst.checkOperation = function (op)  {
+    if (!op) {
+        return false;
+    } 
+    var n = parseInt(op);
+    if (n <= 170 && n >= 10 && (n % 10 == 0)) {
+        return true;
+    } else {
+        return false;
+    }
+ };
+
+/**SNDOC
+ @name QueueState
+ @description The states used in queues
+ @author andreas.reermann@atos.net
+ */
+RTSMConst.QueueState = {
+    "WAIT": 5,
+	"READY": 10,
+	"QUEUED": 15,
+    "PROCESSING": 20,
+    "PROCESSED": 30
+};
+
+/**SNDOC
+ @name QueueProcessingResult
+ @description The states used in queues
+ @author andreas.reermann@atos.net
+ */
+RTSMConst.QueueProcessingResult = {
+	"OK": 10,
+	"ERROR": 20
+};
+
+/**SNDOC
+ @name TreeStates
+ @description CI Tree Stats for intrincsic and potential Status
+ @author andreas.reermann@atos.net
+ */
+RTSMConst.CITREE_STATE_OK = 0;
+RTSMConst.CITREE_STATE_AT_RISK = 70;
+RTSMConst.CITREE_STATE_DEGRADATION = 90;
+RTSMConst.CITREE_STATE_OUTAGE = 110;
+
+/**SNDOC
+    @name Severity
+    @description Alert severity
+    @author hendrik.mueller@atos.net
+    */
+
+RTSMConst.Severity_Critical = 1;
+RTSMConst.Severity_Major = 2;
+RTSMConst.Severity_Minor = 3;
+RTSMConst.Severity_Warning = 4;
+RTSMConst.Severity_OK = 5;
+RTSMConst.Severity_Clear = 0;]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-11-02 09:18:05</sys_created_on>
+        <sys_id>320851281bdc681051d64261cd4bcbc2</sys_id>
+        <sys_mod_count>41</sys_mod_count>
+        <sys_name>RTSMConst</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_320851281bdc681051d64261cd4bcbc2</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:23:51</sys_updated_on>
+    </sys_script_include>
+</record_update>

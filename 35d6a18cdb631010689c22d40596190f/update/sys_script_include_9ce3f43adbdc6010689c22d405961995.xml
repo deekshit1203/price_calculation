@@ -1,0 +1,557 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.RTSMUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>RTSM Utility functions</description>
+        <name>RTSMUtil</name>
+        <script><![CDATA[/**SNDOC
+		@name RTSMUtil
+		@description Utility Functions
+		Class consists of three parts:
+        Part A:	former name: x_139035_paladin.PaladinUtils        
+        Part B: Function findBy, former Class ATOS_GR_HELPER   
+        Part C: JSUtil because SN JSUtil is in scope Global and accessible from "This application scope"   
+            Since 2021-04-29: JSUtill is accessible from all application scopes, if not set it will be done during post installation 
+		@domain Utilities
+		@author Many
+		@version 1.0.0
+	*/
+
+var RTSMUtil = Class.create();
+RTSMUtil.prototype = {
+    properties_table: 'x_atpu_rtsm_properties',
+
+    initialize: function () {
+        this.missing_property_message = this.getProperty('moustache_missing');
+    },
+
+    /* ***** ***** ***** ***** ***** ***** ***** ***** *****
+    Part A:	former name: x_139035_paladin.PaladinUtils
+	*/
+    /**SNDOC
+    		@name getProperty
+    		@description 
+    		@param {*} [name] -  
+    	*/
+    getProperty: function (name, alt) {
+        var gr = new GlideRecord(this.properties_table);
+        gr.addQuery('name', name);
+        gr.query();
+        if (gr.next()) {
+            return gr.getValue('value');
+        } else {
+            if (global.JSUtil.nil(alt))
+                return '';
+            else 
+                return alt;
+        }
+    },
+    /**SNDOC
+    		@name updateProperty
+    		@description 
+    		@param {*} [name] -  
+    		@param {*} [value] -  
+    	*/
+    updateProperty: function (name, value) {
+        var gr = new GlideRecord(this.properties_table);
+        gr.addQuery('name', name);
+        gr.query();
+        if (gr.next()) {
+            gr.value.setValue(value);
+            gr.update();
+        }
+    },
+    /**SNDOC
+    		@name normalizeHTML
+    		@description Takes html template and returns it without script and style elements
+    		@param {html} [html] -  Html template
+    		@returns {string}
+    	*/
+    normalizeHTML: function (html) {
+        var normalizedHtml = html.replace(/<script>.*?<\/script>/g, '');
+        normalizedHtml = normalizedHtml.replace(/<style>.*?<\/style>/g, '');
+        return normalizedHtml;
+    },
+    /**SNDOC
+    		@name 
+    		@description 
+    		@param {*} [array] -  
+    		@param {*} [key] -  
+    	*/
+    arraySort: function (array, key) {
+        try {
+            array.sort(function (a, b) {
+                var keyA = a[key].toLowerCase();
+                var keyB = b[key].toLowerCase();
+
+                if (keyA < keyB) {
+                    return -1;
+                }
+                if (keyA > keyB) {
+                    return 1;
+                }
+
+                return 0;
+            });
+
+            return array;
+        } catch (e) {
+            gs.info('Error in Script Include <x_atpu.rtsm.RTSMUtil> - <arraySort>: ' + e);
+            return array;
+        }
+
+    },
+    /**SNDOC
+    		@name getStringWithVariablesParsed
+    		@description Takes string and returns it with variables parsed
+    		@param {string} [String] -  template
+    		@param {object} [GlideRecords] -  key-value pairs that associates names with GlideRecords
+    		@param {object} [Inputs] -  from portal widget. Portal id + portal page
+    		@returns {string}
+    	*/
+    getStringWithVariablesParsed: function (string, glideRecords) {
+        try {
+            if (!string) return '';
+
+            var arrayUtil = new global.ArrayUtil();
+
+            if (string.match(/\${.*?}/g)) {
+                var variables = arrayUtil.unique(string.match(/\${.*?}/g));
+
+                for (var i = 0; i < variables.length; i++) {
+                    var value = this._parseStringVariable(variables[i], glideRecords);
+                    var regex = new RegExp('\\' + variables[i], 'g');
+                    string = string.replace(regex, value);
+                }
+            }
+
+            return string;
+        } catch (e) {
+            var msg = 'Error in Script Include <x_atpu.rtsm.RTSMUtil>';
+            msg += ' - <getStringWithVariablesParsed>: ' + e;
+            msg += ' Occurs with string ' + string;
+            gs.info(msg);
+            return '';
+        }
+    },
+    /**SNDOC
+    		@name _parseStringVariable
+    		@description Takes variables from template with set of GlideRecords and tries to return the display value of the query
+    		@private
+    		@param {string} [Variable] -  Variable of template
+    		@param {object} [GlideRecords] -  key-value pairs that associates names with GlideRecords
+    		@returns {string}
+    	*/
+    _parseStringVariable: function (variable, glideRecords) {
+        try {
+            var fields = variable.replace(/[\${}]/g, '').split('.');
+            var temp = glideRecords[fields[0]];
+
+            //if the field does not exist in the glideReords object, return the missing property message
+            if (temp === undefined || temp === null) {
+                return this.missing_property_message;
+            }
+
+            // if the value is already a string, return it
+            if (typeof temp === 'string' || temp instanceof String) {
+                return temp;
+            }
+
+            // if (inputs && (fields[0] == 'portal' || fields[0] == 'paladin_map_page')) {
+            // 	return inputs[fields[0]];
+            // } else if (!temp) {
+            // 	return this.missing_property_message;
+            // }
+
+            for (var j = 1; j < fields.length; j++) {
+                temp = temp[fields[j]];
+            }
+
+            if (typeof temp === 'string' || temp instanceof String) {
+                return temp;
+            } else {
+                return temp.getDisplayValue();
+            }
+        } catch (e) {
+            gs.info('Error in Script Include <x_atpu.rtsm.RTSMUtilLib> - <_parseTemplateVariable>: ' + e);
+            return this.missing_property_message;
+        }
+    },
+    /**SNDOC
+    		@name getFields
+    		@description Returns array of field name
+    		@param {string} [Table] -  name
+    		@param {string} [Operator] -  value
+    		@param {string} [Keyword] -  to be search
+    		@returns {array} 
+    	*/
+    getFields: function (table, operator, keyword) {
+        var fields = [];
+
+        var gr = new GlideRecord('sys_dictionary');
+        gr.addQuery('name', table);
+        gr.addQuery('column_label', 'STARTSWITH', keyword);
+        gr.query();
+
+        while (gr.next()) {
+            fields.push(gr.getValue('element'));
+        }
+
+        return fields;
+    },
+
+    type: 'RTSMUtil'
+};
+
+
+/* ***** ***** ***** ***** ***** ***** ***** ***** *****
+    Part B: Function findBy, former Class ATOS_GR_HELPER
+*/   
+/**SNDOC
+		@name findBy
+		@description Find in tablename by column 
+		@param {String} [tablename] - table to query
+		@param {String} [column] - column to search for value
+		@param {String} [value] -  value to find in column
+		@param {String} [column_out] - column name from which to retrieve the result. Optional.
+		@returns {any} if column_out -> value of column_out,  else -> the whole glide record. Null if no record was found.
+	*/
+    RTSMUtil.findBy = function (tablename, column, value, column_out) {
+        var gr = new GlideRecord(tablename);
+        if (gr.get(column, value)) {
+            if (column_out) {
+                return gr[column_out];
+            } else {
+                return gr;
+            }
+        } else {
+            return null;
+        }
+    };
+
+/* ***** ***** ***** ***** ***** ***** ***** ***** *****
+    Part C: JSUtil because SN JSUtil is in scope Global and not accessible from "This application scope"
+    Since 2021-04-29: JSUtill is accessible from all application scopes, if not set it will be done during post installation 
+*/
+
+
+/*
+ Returns true if the two given values are equivalent, and optionally logs any differences.  The two
+ values may be any value - JavaScript primitives or objects.  Objects of classes Object, Array, Date,
+ String, Boolean, and Number are all compared correctly and (as necessary) recursively.  Note that 
+ comparand types much match exactly - for the purposes of this comparison, 'abc' does NOT match
+ new String('abc').  If differences are logged, they may be retrieved from RTSMUtil.areEqualLog.
+	*/
+RTSMUtil.areEqualLog = '';
+RTSMUtil.areEqual = function (val1, val2, logDiff) {
+    RTSMUtil.areEqualLog = '';
+    if (typeof val1 != typeof val2) {
+        log('Different type: ' + val1 + ' (' + typeof val1 + ') and ' + val2 + ' (' + typeof val2 + ')');
+        return false;
+    }
+
+    // if we have two undefineds, we're good...
+    if (typeof val1 == 'undefined')
+        return true;
+
+    // handle the awkward case of null...
+    if ((val1 === null) || (val2 === null)) {
+        if (val1 === val2)
+            return true;
+
+        log('Null and ' + ((val1 === null) ? typeof val2 : typeof val1));
+        return false;
+    }
+
+    // if we've got a primitive type, directly compare...
+    if (!(val1 instanceof Object)) {
+        if (val1 === val2)
+            return true;
+
+        log('Different primitive ' + typeof val1 + ' values: ' + val1 + ' and ' + val2);
+        return false;
+    }
+
+    // make sure we've got a object types here...
+    if (typeof val1 != 'object') {
+        log('Unexpected type: ' + typeof val1);
+        return false;
+    }
+
+    // handle any Java objects passed in...
+    if (isJavaObject(val1) || isJavaObject(val2)) {
+        if (isJavaObjectVal1() && isJavaObject(val2)) {
+            if (val1.equals(val2))
+                return true;
+
+            log('Different Java objects');
+        }
+        log('Java object and JavaScript object');
+        return false;
+    }
+
+    // make sure we've got two JavaScript objects of the same type...
+    var vc1 = val1.constructor.name;
+    var vc2 = val2.constructor.name;
+    if (vc1 != vc2) {
+        log('Different JavaScript object types: ' + val1.constructor.name + ' and ' + val2.constructor.name);
+        return false;
+    }
+
+    // handle case of two JavaScript objects in the same class that return primitives for valueOf()...
+    if ((vc1 == 'Boolean') || (vc1 == 'Date') || (vc1 == 'Number') || (vc1 == 'String')) {
+        if (val1.valueOf() == val2.valueOf())
+            return true;
+
+        log('Different ' + vc1 + ' primitive wrapper values: ' + val1.valueOf() + ' and ' + val2.valueOf());
+        return false;
+    }
+
+    // if we've got two arrays, compare recursively element by element...
+    if (val1.constructor.name == 'Array') {
+        // we'd better be the same size!
+        if (val1.length != val2.length) {
+            log('Different array lengths: ' + val1.length + ' and ' + val2.length);
+            return false;
+        }
+
+        // compare all our elements, in order...
+        for (var i = 0; i < val1.length; i++) {
+            if (RTSMUtil.areEqual(val1[i], val2[i], logDiff))
+                continue;
+
+            log('Different array element values: ' + val1[i] + ' and ' + val2[i]);
+            return false;
+        }
+        return true;
+    }
+
+    // if we've got two objects, compare elements recursively and check for leftovers...
+    if (val1.constructor.name == 'Object') {
+        // collect all the property names in val2...
+        var vp2 = {};
+        for (var vn2 in val2)
+            vp2[vn2] = true;
+
+        // see if we have exactly the same properties in val1...
+        for (var vn1 in val1) {
+            if (vp2[vn1]) {
+                delete vp2[vn1];
+                continue;
+            }
+
+            log('Different properties');
+            return false;
+        }
+        for (var vn2 in vp2) {
+            log('Different properties');
+            return false;
+        }
+
+        // ok, we have the same properties - but do they have the same values?
+        for (var vn1 in val1) {
+            if (RTSMUtil.areEqual(val1[vn1], val2[vn1], logDiff))
+                continue;
+
+            log('Properties have different values');
+            return false;
+        }
+        return true;
+    }
+
+    // if we get here, then we've got two objects of unknown object types...
+    log('Unknown object type: ' + val1.constructor.name);
+    return false;
+
+    function log(msg) {
+        if (!logDiff)
+            return;
+
+        RTSMUtil.areEqualLog += msg;
+        RTSMUtil.areEqualLog += '\n';
+    }
+};
+
+/*
+ Logs all the properties (recursively) in the given object: name, type, and value.  The optional second parameter is a name for the logged object.
+	*/
+RTSMUtil.logObject = function (obj, name) {
+    gs.log(RTSMUtil.describeObject(obj, name));
+};
+
+/*
+ Returns a string that recursively describes all the properties in the given object: name, type, and value.  
+ The optional second parameter is a name for the logged object.
+	*/
+RTSMUtil.describeObject = function (obj, name) {
+    var result = [];
+    result.push('Log Object' + ((name) ? ': ' + name : ''));
+    if ((typeof (obj) != 'object' && typeof (obj) != 'string') || obj == null)
+        result.push('  null, undefined, or not an object: ' + typeof (obj));
+    else
+        RTSMUtil._describeObject(obj, null, '  ', 0, result);
+    return result.join('\n');
+};
+
+/*
+ Internal recursive object description string builder.
+	*/
+RTSMUtil._describeObject = function (obj, name, lead, level, result) {
+    if (level > 25) {
+        result.push(lead + '<<< exceeded 25 recursion levels, ignoring any deeper levels >>>');
+        return;
+    }
+
+    var ns = (name == null) ? '' : name + ': ';
+    var value = obj;
+    var type = global.JSUtil.type_of(value);
+    if (type == 'function') {
+        result.push(lead + ns + type);
+        return;
+    } else if (type != 'object') {
+        result.push(lead + ns + type + ' = ' + value);
+        return;
+    }
+
+    if (value instanceof Array) {
+        result.push(lead + ns + 'Array of ' + value.length + ' elements');
+        for (var i = 0; i < value.length; i++)
+            RTSMUtil._describeObject(value[i], '[' + i + ']', lead + '  ', level + 1, result);
+    } else {
+        if (global.JSUtil.isJavaObject(obj)) {
+            var klassName = GlideJSUtil.getJavaClassName(obj);
+            result.push(lead + ns + 'Java Object: ' + klassName + ' = ' + obj);
+        } else if (obj instanceof GlideRecord) {
+            var rec = (!gs.nil(obj.getDisplayValue())) ? '@ ' + obj.getDisplayValue() : '';
+            result.push(lead + ns + 'GlideRecord(\'' + obj.getTableName() + '\') ' + rec);
+        } else {
+            if (typeof obj.explainLock == 'function') { // is this a GlideElement of some kind?
+                var nm = obj.getName();
+                var vl = obj.getDisplayValue();
+                // AR 2020-11-09 without function
+                //result.push(lead + ns + 'GlideElement (or child class): ' + nm + ' = ' + vl);
+            } else
+                result.push(lead + ns + 'Object');
+            for (var nmo in obj)
+                RTSMUtil._describeObject(obj[nmo], nmo, '  ' + lead, level + 1, result);
+        }
+    }
+};
+
+/*
+ NOTE: between this banner and the following banner, several string literals are specified in an odd way: by the contatenation of a single
+       character ('&') and the remainder of the HTML entity (such as 'amp;').  This method was employed to avoid having the entities translated 
+       into the equivalent characters when the script include is edited in the instance.
+	*/
+RTSMUtil.AMP = /\&/g;
+RTSMUtil.GT = /\>/g;
+RTSMUtil.LT = /\</g;
+RTSMUtil.QT = /\"/g;
+RTSMUtil.AMP_ENT = new RegExp('\\&' + 'amp;', 'g');
+RTSMUtil.GT_ENT = new RegExp('\\&' + 'gt;', 'g');
+RTSMUtil.LT_ENT = new RegExp('\\&' + 'lt;', 'g');
+RTSMUtil.QT_ENT = new RegExp('\\&' + 'quot;', 'g');
+
+RTSMUtil.escapeText = function (text) {
+
+    var ampRegex = new SNC.Regex('/&/');
+    var ltRegex = new SNC.Regex('/</');
+    var gtRegex = new SNC.Regex('/>/');
+
+    var result = ampRegex.replaceAll('' + text, '&' + 'amp;');
+    result = ltRegex.replaceAll(result, '&' + 'lt;');
+    return gtRegex.replaceAll(result, '&' + 'gt;');
+
+};
+
+RTSMUtil.unescapeText = function (text) {
+
+    var ampRegex = new SNC.Regex('/&' + 'amp;/');
+    var ltRegex = new SNC.Regex('/&' + 'lt;/');
+    var gtRegex = new SNC.Regex('/&' + 'gt;/');
+
+    var result = ampRegex.replaceAll('' + text, '&');
+    result = ltRegex.replaceAll(result, '<');
+    return gtRegex.replaceAll(result, '>');
+
+};
+
+RTSMUtil.escapeAttr = function (attr) {
+    var result = ('' + attr).replace(RTSMUtil.AMP, '&' + 'amp;');
+    return result.replace(RTSMUtil.QT, '&' + 'quot;');
+};
+
+RTSMUtil.unescapeAttr = function (attr) {
+    var result = ('' + attr).replace(RTSMUtil.QT_ENT, '"');
+    return result.replace(RTSMUtil.AMP_ENT, '&');
+};
+/** Render an expanded/evaluted string from a string that may contain one
+  or more Javascript expressions, each wrapped in a dolloar-braces 
+  delimiter pattern. 
+
+     'The timeis:${newGlideDateTime()}'
+
+  will displaythecurrenttime.
+
+  When used in specific contexts, such as inside a workflow context
+  certain global variables might be usable such as 'current' or 'workflow':
+
+      'WF State:${context.state},rec:${current.sys_id}'
+  
+  and content can be substituted into data from various Javascripts:
+
+      <CREATED>${newGlideDateTime()}</CREATED>
+ 
+  WARNING: This is used heavily by workflows.  If this is changed, then 
+           be sure to run all workflow tests. Test Log Message activity
+           with ${workflow.variables.somevariable} and similar usages.
+	*/
+RTSMUtil.strEval = function (str) {
+    var s = new String(str);
+
+    // if the entire string is within a ${} return the eval of it
+    // to allow getting an object back from this method
+    //
+    if (s.startsWith("${") && s.endsWith("}") && (s.indexOf("${", 2) == -1))
+        return eval(s.substring(2, s.length - 1));
+
+    // also replace anything with ${something} to eval(something)
+    //
+    s = s.replace(/\$\{\s*(.*?)\s*\}/g, function (str, p1) {
+        return (eval(p1) || "")
+    });
+    if (s.indexOf('javascript:') == 0)
+        s = eval(s.substring(11));
+    return s;
+};
+/**SNDOC
+		@name RTSMUtil.objectValues
+		@description return the values of an object. Emulates Object.values() for ECMA5
+		@param {Object} [o] - the Object
+		@returns {Array(any)} The values of the object
+	*/
+RTSMUtil.objectValues = function (o) {
+    return Object.keys(o).map(function (objKey) {
+        return o[objKey];
+    });
+};
+
+ 
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-11-09 06:26:25</sys_created_on>
+        <sys_id>9ce3f43adbdc6010689c22d405961995</sys_id>
+        <sys_mod_count>9</sys_mod_count>
+        <sys_name>RTSMUtil</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_9ce3f43adbdc6010689c22d405961995</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:26:02</sys_updated_on>
+    </sys_script_include>
+</record_update>

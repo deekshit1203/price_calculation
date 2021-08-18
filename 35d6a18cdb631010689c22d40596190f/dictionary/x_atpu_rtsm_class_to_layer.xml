@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="Class to Layer" max_length="40" name="x_atpu_rtsm_class_to_layer" type="collection">
+        <element label="Active" max_length="40" name="active" type="boolean"/>
+        <element label="Class" mandatory="true" max_length="80" name="class_name" type="table_name"/>
+        <element label="Included Subclasses" max_length="16000" name="included_subclasses" read_only="true" type="string"/>
+        <element label="Include Subclasses" max_length="40" name="include_subclasses" type="boolean"/>
+        <element display="true" label="Model Layer" mandatory="true" max_length="32" name="model_layer" reference="x_atpu_rtsm_model_layer" type="reference"/>
+        <index name="index">
+            <element name="model_layer"/>
+        </index>
+    </element>
+</database>

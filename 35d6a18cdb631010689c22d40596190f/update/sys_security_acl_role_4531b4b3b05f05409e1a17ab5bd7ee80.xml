@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role">
+    <sys_security_acl_role action="INSERT_OR_UPDATE">
+        <sys_class_name>sys_security_acl_role</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>4531b4b3b05f05409e1a17ab5bd7ee80</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_atpu_rtsm_rules.u_script</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_security_acl display_value="">6c0174b3b05f05409e1a17ab5bd7ee1d</sys_security_acl>
+        <sys_update_name>sys_security_acl_role_4531b4b3b05f05409e1a17ab5bd7ee80</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-09-25 10:27:12</sys_updated_on>
+        <sys_user_role display_value="">6b4ddc26b01b81409e1a17ab5bd7ee82</sys_user_role>
+        <transaction_id/>
+    </sys_security_acl_role>
+</record_update>

@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.FunnelFiller</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Processing Queue: Create Entry</description>
+        <name>FunnelFiller</name>
+        <script><![CDATA[/**SNDOC
+	@name FunnelFiller
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var FunnelFiller = Class.create();
+FunnelFiller.prototype = {
+
+	initialize: function () {
+		this.error = "";	
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "FunnelFiller");	
+		this.ops = RTSMConst.QO;
+		this.qState = RTSMConst.QueueState;			
+	},
+
+	/**SNDOC
+		@name insert
+		@description 
+		@author ATF2
+		@param  {String} [operation] - Operation to be registered. Must be a key in this.ops (RTSMConst.QO). 
+		@param  {String} [dataObj] - dependend on operation.
+ - ["createAlert", "updateAlert", "resolveAlert"]: Data Object is an object of type [em_alert]
+ - "recalcCI": Data Object is an object {customer: {...}, ci: {..}, queuedata: {...}}
+ - ["recalcCustomer", "recalcCustomerLeftover"]: Data Object is an object of type String, it contains the sys_id of the Customer
+ - ["recalcCustomer", "recalcCustomerLeftover", "cmdbChangeDetectionCustomer", "cmdbImportCustomerLeftover", "enableCustomerRTSM", "disableCustomerRTSM"]: Data Object is an object of type String, it contains the sys_id of the Customer
+ - ["cmdbFilterCustomer", "disconnectCIs", "connectCIs", "updateCIRelation"]:  Data Object is an object of type String, it contains the sys_id of the Customer
+ - "cmdbImportCustomers": not used
+		@returns {Boolean} 
+		*/
+
+	insert: function (operation, dataObj) {
+		this.log.debug('[insert] ' + '<<< Start: Operation=' + operation);
+
+		//Passed Operation is either undefined or has wrong value - ERROR
+		if ( !RTSMConst.checkOperation(operation)) {
+			this.error = "An invalid operation " + operation + " was passed to the FunnelFiller. No entry has been inserted into the Processing Queue.";
+			return false;
+		}
+
+		//Create empty entry for  SEV CI Tree Processing Queue
+		this.grQueue = new GlideRecord("x_atpu_rtsm_citreesp_queue");
+		this.grQueue.initialize();	
+		//Set Type to mapped Choice number
+		//this.grQueue.type = this.ops[operation];
+		this.grQueue.type = operation;
+		
+		//Set State to Ready
+		this.grQueue.state = this.qState.READY;
+
+		//Is Operation createAlert||updateAlert||resolveAlert?
+		if (operation == RTSMConst.QO.createAlert || operation == RTSMConst.QO.updateAlert || operation == RTSMConst.QO.resolveAlert) {
+			//TODO: dataObj looks like a sev alert, might be we have to use em_alert here
+			//Data Object is an object of type Alert
+			this.log.logObject(dataObj, 'dataObj');
+			this.log.debug('dataObj em_alert: ' + global.JSON.stringify(dataObj));
+
+			var grCI = RTSMUtil.findBy('cmdb_ci', 'sys_id', dataObj.cmdb_ci);
+			this.log.logObject(grCI, 'grCI');
+
+			var config = new SPConfig();
+			//var isCustomerRTSMEnabled = config.isCustomerRTSMEnabled(dataObj.company);
+			var isCustomerRTSMEnabled = config.isCustomerRTSMEnabled(grCI.company);
+
+			//TODO: rework domain handling
+
+			//Set Alert on Queue Entry to Parameter 2
+			this.grQueue.alert = dataObj.sys_id.toString();
+			//Set CI on Queue Entry to Affected CI from Alert
+			this.grQueue.alert_ci = dataObj.cmdb_ci;
+			//Set Domain to Domain of CI
+			this.grQueue.sys_domain = dataObj.cmdb_ci.sys_domain;
+
+		} else if (operation == RTSMConst.QO.recalcCI) {
+			//Is customer CI Tree enabled?
+			this.log.logObject(dataObj, 'dataObj');
+			this.log.debug('dataObj: ' + global.JSON.stringify(dataObj));
+			
+			var configObj = new SPConfig();
+
+			//Set Customer on Queue Entry to Parameter2.customer
+			this.grQueue.customer = dataObj.customer;
+
+			//Set Domain to Domain of Customer
+			var companyGR = new CoreCompany();
+			companyGR.load(dataObj.customer);
+			this.grQueue.sys_domain = companyGR.getDomain();
+
+			//Set CI on Queue Entry to Parameter2.ci
+			this.grQueue.alert_ci = dataObj.ci;
+
+			if (dataObj.queueData != null) {
+				//Set Queue Data on Queue entry to Parameter 2.queueData
+				this.grQueue.queue_data = dataObj.queueData;
+			}
+		} else if (operation == RTSMConst.QO.recalcCustomer || operation == RTSMConst.QO.recalcCustomerLeftover) {
+			//Data Object is an object of type String, it contains the sys_id of the Customer
+			this.log.debug('dataObj Customer sys_id: ' + dataObj);
+
+			//Is customer CI Tree enabled?
+			var spConfig = new SPConfig();
+
+			var ciTreeRTSMEnabled = spConfig.isCustomerRTSMEnabled(dataObj);
+
+			if (!ciTreeRTSMEnabled) {
+				return;
+			}
+	
+			//Set Customer on Queue Entry to Parameter 2
+			this.grQueue.customer = dataObj;
+
+			//Load Customer to assign Domain
+			var tempCustomer = new GlideRecord("core_company");
+			var ret = tempCustomer.get(dataObj);
+			//Loading of Customer from sys_id was not successful
+			if (ret === false) {
+				this.error = "An invalid Company (Customer) has been given. Company with sys_id " + dataObj + " could not be loaded from the core_company table.";
+				return false;
+			}
+			this.grQueue.sys_domain = tempCustomer.sys_domain;
+		}
+
+		else if (operation == RTSMConst.QO.cmdbChangeDetectionCustomer || operation == RTSMConst.QO.cmdbImportCustomerLeftover || operation == RTSMConst.QO.enableCustomerRTSM || operation == RTSMConst.QO.disableCustomerRTSM) {
+			//Data Object is an object of type String, it contains the sys_id of the Customer
+			this.log.debug('dataObj Customer sys_id: ' + dataObj);
+			
+			//Set Customer on Queue Entry to Parameter 2
+			this.grQueue.customer = dataObj;
+
+			//Load Customer to assign Domain
+			var tempCustomer = new GlideRecord("core_company");
+			var ret = tempCustomer.get(dataObj);
+			//Loading of Customer from sys_id was not successful
+			if (ret === false) {
+				this.error = "An invalid Company (Customer) has been given. Company with sys_id " + dataObj + " could not be loaded from the core_company table.";
+				return false;
+			}
+			this.grQueue.sys_domain = tempCustomer.sys_domain;
+		} else if (operation == RTSMConst.QO.cmdbFilterCustomer || operation == RTSMConst.QO.disconnectCIs || operation == RTSMConst.QO.connectCIs || operation == RTSMConst.QO.updateCIRelation) {
+			//Set Customer on Queue Entry to Parameter 2.customer
+			this.grQueue.customer = dataObj.customer;
+
+			//Set Domain to Domain of Customer
+			var company = new CoreCompany();
+			company.load(dataObj.customer);
+			this.grQueue.sys_domain = company.getDomain();
+
+			//Set Queue Data on Queue entry to Parameter 2.queueData
+			this.grQueue.queue_data = dataObj.queueData;
+		} else if (operation == RTSMConst.QO.cmdbImportCustomers) {
+			var domainValue = new RTSMUtil().getProperty(RTSMConst.citreesp_queue_genericdomainname);
+						
+			var domain = '';
+
+			var rec = new GlideRecord('domain');
+			if (rec.isValid()) {
+				rec.addQuery('name', domainValue);
+				rec.query();
+				if (rec.next()) {
+					domain = rec.sys_id;
+				} else {
+					domain = null;
+				}
+			} else {
+				domain = null;
+			}
+			this.grQueue.sys_domain = domain;
+		}
+
+		//Save Queue Entry to Queue
+		this.grQueue.insert();
+
+		//	
+		// var s = global.JSON.stringify(this.grQueue);
+		// gs.info("json="+s);
+		//
+		this.log.logObject(this.grQueue, 'grQueue');
+		this.log.debug("grQueue: ", global.JSON.stringify(this.grQueue));
+		this.log.debug('[insert] ' + '>>> End');
+
+		return true;
+	},
+
+	type: 'FunnelFiller'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-12-09 09:40:11</sys_created_on>
+        <sys_id>9beff7d8db0160d0689c22d4059619d3</sys_id>
+        <sys_mod_count>23</sys_mod_count>
+        <sys_name>FunnelFiller</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_9beff7d8db0160d0689c22d4059619d3</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:38:46</sys_updated_on>
+    </sys_script_include>
+</record_update>

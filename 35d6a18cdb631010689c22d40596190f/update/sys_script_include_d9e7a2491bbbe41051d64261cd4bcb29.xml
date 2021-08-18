@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SubGraphRTSM</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>SubGraph API:  Part RTSM Graph</description>
+        <name>SubGraphRTSM</name>
+        <script><![CDATA[/**SNDOC
+	@name SubGraphRTSM
+	@description 
+	@domain Impact Tree (original name)
+	@author hendrik.mueller@atos.net / andreas.reermann@atos.net
+	@version 1.0.0
+	*/
+var SubGraphRTSM = Class.create();
+
+SubGraphRTSM.prototype = {
+    initialize: function (aGraph) {
+        // from graph
+        this.graphObj = aGraph;
+        this.graph = this.graphObj.graph;
+        this.reqProps = this.graph.reqProps;
+        this.count = this.graph.count;
+        this.shared = aGraph.shared;
+        this.connectors = aGraph.connectors;
+
+        // shortcuts
+        this.log = new RTSMLog(null, 'RTSM-Graph');
+        this.irr = new IRR();
+        this.sgu = new SubGraphUtil(); 
+        this.grUtil = new GlideRecordUtil();
+        this.arrayUtil = new global.ArrayUtil();
+    },
+
+    /**SNDOC
+    	@name buildSubGraphRTSM 
+    	@description build an impact tree object for an ITOM service 
+    	@param {String} [ctxId] - the sys_id of a business service in 'x_atpu_rtsm_rtsm_cmdb_rel_ci'
+    	@param {Number} [severity] -  include only ci in the tree which have an severity value which is <= severity. Optional. Default: 5 ('ok')
+        @param {Boolean} [strictTree] - Build a strict tree, not a mesh. Not implemented.
+        @return {Object} the itom impact tree {impact_tree: {Object}}
+    	*/
+    buildSubGraphRTSM: function (vtxId, direction) {
+        var isContextCI = Boolean(this.reqProps.ctxObjId == vtxId);
+        this.log.debug('[buildSubGraphRTSM] start vtxId = ' + vtxId + ' / reqProps.ctxObjId: ' + this.reqProps.ctxObjId + ' / isContextCI: ' +  isContextCI);
+        this.log.debug('this.count: ' + JSON.stringify(this.count) + ' / this.shared: ' + JSON.stringify(this.shared));
+
+        this.shared.timeUsage = GlideDateTime.subtract(this.shared.startTime, new GlideDateTime()).getNumericValue();
+        if (this.shared.timeUsage > this.reqProps.timeout) {
+            this.log.debug('this.graph.result.code 1: ' + this.graph.result.code);
+            if (this.graph.result.code == SubGraphUtil.OK) {
+                this.graphObj.setResult("timeout", this.reqProps.timeout);
+            }
+            this.log.debug('return / exit recursion / timeout');
+            return;           
+        }
+
+        if (this.count.vertices > this.reqProps.limit) {
+            if (this.graph.result.code == SubGraphUtil.OK) 
+                this.graphObj.setResult("node_overflow", this.count.vertices);
+            this.log.debug('return / exit recursion / limit overflow');
+            return;
+        }
+
+        var depth = (direction == SubGraphUtil.direction['inbound']) ? this.shared.depthInbound : this.shared.depthOutbound;
+        //AR PN- 
+        // Misunderstanding: This case is no error, but we respone alle vertices with give depth
+        // if (depth > this.reqProps.maxDepth ) {
+        //     if (this.graph.result.code == SubGraphUtil.OK) 
+        //         this.graphObj.setResult("depth_overflow", depth);
+        //     this.log.debug('return / exit recursion / depth overflow');
+        //     return;
+        // }
+        if (depth >= this.reqProps.maxDepth ) {
+            // if (this.graph.result.code == SubGraphUtil.OK) 
+            //     this.graphObj.setResult("depth_overflow", depth);
+            // this.log.debug('return / exit recursion / depth overflow');    
+            return;
+        }
+
+        var igRec = new GlideRecord(SubGraphUtil.tableRTSM["rtsm_cmdb_rel_ci"]);
+        if (!igRec.isValid()) {
+            this.graphObj.setResult("unknown_table", SubGraphUtil.tableRTSM["rtsm_cmdb_rel_ci"]);
+            return;
+        }
+
+        if (direction == SubGraphUtil.direction['any']) {
+            if (this.graph.result.code == SubGraphUtil.OK) 
+                this.graphObj.setResult("internal_direction_error", "any");
+            this.log.debug('return / exit recursion / internal_direction_error');
+            return;
+        }
+
+        if (direction == SubGraphUtil.direction['inbound']) {
+            igRec.addQuery('parent', vtxId);
+            igRec.orderBy('child.name');
+        } else { // outbound
+            igRec.addQuery('child', vtxId);
+            igRec.orderBy('parent.name');            
+        }        
+        igRec.query();
+        this.log.debug(SubGraphUtil.tableRTSM["rtsm_cmdb_rel_ci"] + ": " + RTSMLog.logQuery(igRec));
+
+        if (igRec.getRowCount() == 0) {
+            // CI has no relation in recursion 1 or target has no relation as source in next recursion
+            this.log.debug('return / no more targets');
+
+            if (direction == SubGraphUtil.direction['inbound']) {
+                this.shared.depthInbound--;
+                this.log.debug('this.shared.depthInbound END: ' + this.shared.depthInbound + ' / MAX: ' + this.count.maxDepthInbound );
+            } else {
+                this.shared.depthOutbound--;
+                this.log.debug('this.shared.depthOutbound END: ' + this.shared.depthOutbound + ' / MAX: ' + this.count.maxDepthOutbound );
+            }
+            return;
+        }
+        
+        while (igRec.next()) {
+            var vtxObj = new SubGraphVertice(this.reqProps.idSpace);
+            var vtx = vtxObj.vertice;
+            vtx.manager = RTSMConst.Manager_Bridge;
+            var edgObj = new SubGraphEdge(this.reqProps.idSpace);
+            var edg = edgObj.edge;
+
+            // add Context Vertice
+            if (isContextCI && !this.shared.contextObjFound) {
+                var vtxContextObj = new SubGraphVertice(this.reqProps.idSpace);
+                var vtxContext = vtxContextObj.vertice;
+                this.ciStatusRTSM(vtxContextObj, vtxId);
+
+                vtxContext.manager = RTSMConst.Manager_Bridge;  
+                var rootCi = this.grUtil.getCIGR(vtxId);
+                vtxContext.id = vtxId;
+                vtxContext.name = rootCi.name.toString();                
+                vtxContext.clazz = rootCi.sys_class_name.toString();
+                vtxContext.modelLayer = this.irr.layerMap[rootCi.sys_class_name];
+                this.grUtil.populateFromGROnly(vtxContext.props, rootCi, SubGraphUtil.cmdbFields);                   
+                
+                if (!(this.arrayUtil.contains(this.shared.verticesFound, vtxContext.id))) {
+                    this.log.debug('vertice: push / root CI: ' + vtxContext.name);
+                    this.graph.vertices.push(vtxContext);
+                    this.shared.verticesFound.push(vtxContext.id);
+                
+                    this.count.vertices++;
+                    this.shared.verticesBRIDGE++;         
+                    this.shared.contextObjFound = true;  
+                }        
+            }
+            // <<
+
+            if (direction == SubGraphUtil.direction['inbound']) {
+                this.shared.depthInbound++;
+                this.count.maxDepthInbound = (this.shared.depthInbound > this.count.maxDepthInbound) ? this.shared.depthInbound : this.count.maxDepthInbound;
+                this.log.debug('this.shared.depthInbound START: ' + this.shared.depthInbound + ' / MAX: ' + this.count.maxDepthInbound );
+            } else {
+                this.shared.depthOutbound++;
+                this.count.maxDepthOutbound = (this.shared.depthOutbound > this.count.maxDepthOutbound) ? this.shared.depthOutbound : this.count.maxDepthOutbound;
+                this.log.debug('this.shared.depthOutbound START: ' + this.shared.depthOutbound + ' / MAX: ' + this.shared.depthOutbound );
+            }
+            
+            this.grUtil.populateFromGRIgnore(edg.props, igRec, SubGraphUtil.relationRTSMIgnore);
+ 
+            // *** Inbound: the child / target is the vertice in the impact tree !!! ***
+            // *** Outbound: the parent is the vertice in the impact tree !!! ***
+            if (direction == SubGraphUtil.direction['inbound']) {
+                edgObj.help.targetVtxKey = igRec.getValue('child');
+                edgObj.help.sourceVtxKey = igRec.getValue('parent');
+            } else { // outbound
+                edgObj.help.targetVtxKey = igRec.getValue('parent');
+                edgObj.help.sourceVtxKey = igRec.getValue('child');          
+            }    
+
+            this.ciStatusRTSM(vtxObj, edgObj.help.targetVtxKey);
+
+            var targetCi = this.grUtil.getCIGR(edgObj.help.targetVtxKey);
+            var targetClass = targetCi.sys_class_name;
+
+            vtx.id = edgObj.help.targetVtxKey;
+            vtx.name = targetCi.name.toString();                
+            vtx.clazz = targetCi.sys_class_name.toString();
+            vtx.modelLayer = this.irr.layerMap[targetClass];
+            // this.log.debug('vtx: ' + JSON.stringify(vtx));
+
+            edg.from = edgObj.help.sourceVtxKey;
+            edg.to = edgObj.help.targetVtxKey;
+
+            // this.log.debug('edg.props["type"]: ' + edg.props["type"]);
+            edg.relationType = this.grUtil.getGR('cmdb_rel_type', edg.props["type"]).name.toString();
+
+            edg.percentOutage = edg.props["percent_outage"];
+            edg.strength = edg.props["connection_strength"];
+            
+            // Include vertices and edges in the tree which have either one of the requested severities or are the service itself.
+            var minSev = Math.min(vtx.state.potentialState, vtx.state.intrinsicState);
+            if (minSev <= this.graph.reqProps.maxSeverity || isContextCI) {
+                // if (vtx.modelLayer != null && isContextCI) 
+                if (vtx.modelLayer != null) 
+                      if (!(this.arrayUtil.contains(this.shared.layersUsed, vtx.modelLayer))) 
+                        this.shared.layersUsed.push(vtx.modelLayer);                
+
+                //TODO fields from real clazz
+                this.grUtil.populateFromGROnly(vtx.props, targetCi, SubGraphUtil.cmdbFields);    
+                this.log.debug('vtx.props: ' + JSON.stringify(vtx.props));
+
+                /* 
+                Special objects like Network Path, Storage Path are Ci in table sa_*, but have no name in the CI table.
+                The name is present in the impact graph. */
+
+                // in the meshed graph vertices vertices canbe reached by multiple edges. So push
+                // it only if its not already there
+  
+                if (!(this.arrayUtil.contains(this.shared.verticesFound, vtx.id))) {
+                    if (vtxObj.info.isConnectorCI == 1) {
+                        this.log.debug('vertice: not push because connector: ' + vtx.name);
+                        if (!(this.arrayUtil.contains(this.shared.connectorsFound, vtx.id))) {
+                            this.connectors.vertices.push(vtx);
+                            this.shared.connectorsFound.push(vtx.id);
+                            this.shared.connectors++;
+
+                            // AR 2021-07-07 PN-328
+                            this.log.debug('vertice: push / not exists: ' + vtx.name);
+                            this.graph.vertices.push(vtx);
+                            this.shared.verticesFound.push(vtx.id);
+                        }
+                    } else {
+                        // AR 2021-06-04 only No Connector CIs , only real managed by Bridge
+                        this.log.debug('vertice: push / not exists: ' + vtx.name);
+                        this.graph.vertices.push(vtx);
+                        this.shared.verticesFound.push(vtx.id);
+                    }                 
+                    this.count.vertices++;
+                    this.shared.verticesBRIDGE++;                   
+                } else {
+                    this.log.debug('vertice: exists: ' +  vtx.name);                        
+                }
+
+                // PN-305 Loop Detection           
+                this.log.debug('[buildSubGraphRTSM] edg.isLoop: ' + edg.isLoop);
+
+                var nIndex = SubGraphUtil.checkEdgeKnown(this.graph.edges, edg);
+                if (nIndex >= 0) {
+                    this.log.debug('[buildSubGraphRTSM] CI Loop detected: Terminate traversing this branch');
+                    this.shared.countDetectedLoops++;
+                    return;
+                }
+
+                this.graph.edges.push(edg);
+                this.count.edges++;                    
+                this.shared.edgesBRIDGE++;                    
+
+                // Start Recursion
+                // only if no relation exists current target as source
+                // in RTSM Graph normally exits at top or in a connector class
+                this.log.debug('buildSubGraphRTSM: ' + edgObj.help.targetVtxKey);    
+                this.buildSubGraphRTSM(edgObj.help.targetVtxKey, direction);
+ 
+                // if connector then goto ITOM
+                if (vtxObj.info.isConnectorCI == 1) {
+                    this.shared.bsID = edgObj.help.targetVtxKey;
+                    this.graphObj.itomGraph.buildSubGraphITOM(edgObj.help.targetVtxKey, direction);
+                }
+            }
+        }
+        if (direction == SubGraphUtil.direction['inbound']) 
+            this.shared.depthInbound--;
+        else
+            this.shared.depthOutbound--;
+
+        this.log.debug('[buildSubGraphRTSM]  end');
+    },
+    /**SNDOC
+    	@name ciStatusRTSM
+    	@description get the status of a ci in a business service in ITOM
+    	@param {String} [bs_id] -  the sys_id of a business service in ITOM table 'em_impact_status'
+    	@param {String} [ci_id] -  the sys_id of a ci in that business service
+    	@returns {Object} the status of the CI:  { severity: <int>}
+    	*/
+    ciStatusRTSM: function (aVerticeObj, ci_id) {
+        /*
+            If there is no alert management installed, entry for the element, it is in status 'clear'. (0). 
+            The other field values are not known in this case. */
+        var status = {
+            state_intrinsic: 5, //default: Ok
+            state_potential: 5, //default: Ok
+            upstream_state: 0
+        };
+        var sr = new GlideRecord(SubGraphUtil.tableRTSM["rtsm_ci_tree_state_persistency"]);
+        if (sr.isValid()) {
+            sr.addQuery('alert_ci', ci_id);
+            sr.query();
+            // this.log.debug('ci_tree_state_persistency: ' + RTSMLog.logQuery(sr));
+            /*
+                If there is no entry for the element, it is in status ok. (5). 
+                The other field values are not known in this case.
+                */
+            // status = {
+            //     state_intrinsic: 5, //default: Ok
+            //     state_potential: 5, //default: Ok
+            //     upstream_state: 0
+            // };
+            if (sr.next()) {
+                this.grUtil.populateFromGROnly(status, sr, SubGraphUtil.stateRTSM);
+                // this.log.debug('[ciStatusRTSM]: ' + JSON.stringify(status));
+                aVerticeObj.vertice.state.id =  ci_id;
+                aVerticeObj.vertice.state.source = SubGraphUtil.tableRTSM["rtsm_ci_tree_state_persistency"];
+                aVerticeObj.vertice.state.intrinsicState = status.state_intrinsic;
+                aVerticeObj.vertice.state.potentialState = status.state_potential;
+                aVerticeObj.vertice.state.upstreamState = status.upstream_state;
+                aVerticeObj.info.isCluster = (status.is_cluster == 1) ? 1 : 0;                
+                aVerticeObj.info.isRootCI = (status.is_root_ci == 1) ? 1 : 0;              
+                aVerticeObj.info.isConnectorCI = (status.is_connector_ci == 1) ? 1 : 0; 
+            }
+        }
+        // return status;
+    },
+    type: 'SubGraphRTSM'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-27 04:03:41</sys_created_on>
+        <sys_id>d9e7a2491bbbe41051d64261cd4bcb29</sys_id>
+        <sys_mod_count>201</sys_mod_count>
+        <sys_name>SubGraphRTSM</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_d9e7a2491bbbe41051d64261cd4bcb29</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-03 10:10:57</sys_updated_on>
+    </sys_script_include>
+</record_update>

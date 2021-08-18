@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.IRR</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Impact Rule Register</description>
+        <name>IRR</name>
+        <script><![CDATA[/**SNDOC
+	@name IRR
+	@description Accesing the Impact Rule Register
+	@domain Impact Rule Register
+	@author andreas.reermann@atos.net
+	@version 1.0.0
+    */
+   var IRR = Class.create();
+   IRR.prototype = {
+       initialize: function () {
+           this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "IRR");
+           this.arrayUtil = new global.ArrayUtil();
+        //    this.log.debug('[IRR] initialize');
+
+           this.connectorClasses = this._getConnectors();
+           this.domainMap = this._domainMap();
+           this.domainManagerMap = this._domainManagerMap();
+           this.layerMap = this._modelLayerMap();
+
+           this.defaultDomain = "";
+           this.defaultDomainManager = "";     
+           this._defaultDomain();
+        //    this.log.logObject(this.connectorClasses, '[IRR] this.connectorClasses');
+        //    this.log.logObject(this.domainMap, '[IRR] this.domainMap');
+        //    this.log.logObject(this.domainManagerMap, '[IRR] this.domainManagerMap');
+        //    this.log.logObject(this.layerMap, '[IRR] this.layerMap');
+        //    this.log.debug("[IRR] defaultDomain: " +  this.defaultDomain);
+        //    this.log.debug("[IRR] defaultDomainManager: " +  this.defaultDomainManager);
+    },
+
+       _getConnectors: function () {
+           var myCon = [];
+            var grCon = new GlideRecord('x_atpu_rtsm_connector');
+            grCon.addQuery('active', true);
+            grCon.query();
+            if (grCon.isValid()) {
+                while (grCon.next()) {
+                    myCon.push(grCon.getValue('class_name'));
+                }
+            }
+            return myCon;
+        },
+
+        getConnectors: function () {
+             return this.connectorClasses;
+         },
+ 
+        _getBridgeClasses: function () {
+            var myClasses = [];
+            var grDomain = new GlideRecord('x_atpu_rtsm_rtsm_domain');
+            grDomain.addQuery('manager', RTSMConst.Manager_Bridge);
+            grDomain.addQuery('active', true);
+            grDomain.orderBy('sequence');
+            grDomain.query();
+            while (grDomain.next()) {
+                myClasses = this.arrayUtil.union(myClasses,JSON.parse(grDomain.classes_included));
+            }
+            // this.log.debug(myClasses);
+             return myClasses;
+         },
+ 
+         _defaultDomain: function () {
+            var grDomain = new GlideRecord('x_atpu_rtsm_rtsm_domain');
+            grDomain.addQuery('is_default_domain', true);
+            grDomain.addQuery('active', true);
+            grDomain.orderBy('sequence');            
+            grDomain.query();
+            if (grDomain.next()) {
+                this.defaultDomain = grDomain.name;
+                this.defaultDomainManager = grDomain.manager;
+            } else {
+                this.defaultDomain = "";
+                this.defaultDomainManager = "";     
+                this.log.warn('[IRR] [_defaultDomain] - no default domain defined!');         
+            }
+         },
+ 
+/**SNDOC
+	@name isBridgeNode
+	@description checks if the class described by clazz is allowed to be a node in the RTSM impact tree (managed by Bridge)
+    @param {String} [className] - The class name as stored in cmdb_ci.sys_class_name
+    @returns {Boolean} true if the class is allowed, false otherwise
+	*/
+    isBridgeNode: function (clazz) {
+        return (this.getDomainManagerOfClass(clazz) == RTSMConst.Manager_Bridge) ? true : false;                    
+    },
+
+/**SNDOC
+	@name isConnectorNode
+	@description checks if a class acts as connector to another domain. If thats the case the class will be 
+                    inserted into the impact tree, but its state is expected to be calculated by another impact calculation outside of RTSM.
+                    The class must be explicitely recorded in 'x_atpu_rtsm_connector, it cannot be included via subclass
+	@param {String} [cls] - the name of the class to be checked
+	@returns {Boolean} true if the cls acts as connector between rtsm domains
+	*/       
+    isConnectorNode: function (clazz) {
+           return (this.arrayUtil.indexOf(this.connectorClasses, clazz) == -1) ? false : true;
+    },
+
+   /*
+        Access Functions for Layer Map
+    */
+    /**SNDOC
+    	@name _modelLayerMap
+    	@description Create the mapping of table names to model layer names for fast lookup
+    	@returns {Object} 
+    	*/
+        _modelLayerMap: function () {
+            class2Layer = {};
+            var layRec = new GlideRecord('x_atpu_rtsm_model_layer');
+            if (layRec.isValid()) {
+                layRec.addQuery('active', true);
+                layRec.query();
+                while (layRec.next()) {
+                    var layer = layRec.getValue('name');
+                    var classesIncluded = layRec.getValue('classes_included');
+                    if (!gs.nil(classesIncluded)) {
+                        var subclasses = JSON.parse(classesIncluded);
+                        for (var i = 0; i < subclasses.length; i++) {
+                            class2Layer[subclasses[i]] = layer;
+                        }
+                    }
+                }
+            }
+            // this.log.logObject(class2Layer, '[_modelLayerMap]');
+            return class2Layer;
+        },
+        /**SNDOC
+            @name modelLayersRank
+            @description Object that maps model layer names to their sequence number
+            @returns {Object} Object that maps model layer names to their sequence number
+            */
+        modelLayersRank: function () {
+            layers = {};
+            var layRec = new GlideRecord('x_atpu_rtsm_model_layer');
+            if (layRec.isValid()) {
+                layRec.addQuery('active', true);
+                layRec.orderBy('sequence');
+                layRec.query();
+                while (layRec.next()) {
+                    layers[layRec.getValue('name')] = layRec.getValue('sequence');
+                }
+            }
+            // this.log.logObject(layers, '[modelLayersRank]');
+            return layers;
+        },
+    
+        /**SNDOC
+        @name getLayerOfClass
+        @description return the model_layer a given class belongs to
+        @returns {GlideRecord(model_layer)} the model_layer of the clazz
+        */
+        getLayerOfClass: function (clazz) {
+            if (clazz in this.layerMap) {
+                this.log.debug('[IRR] getLayerOfClass return: '  + clazz + ' / ' +  this.layerMap[clazz]);
+                return this.layerMap[clazz];
+            } else {
+                this.log.debug('[IRR] getLayerOfClass return: null');
+                return null;
+            }
+        },
+    
+   /*
+        Access Functions for Domain Map
+    */
+    /**SNDOC
+    	@name _domainMap
+    	@description Create the mapping of table names to model layer names for fast lookup
+    	@returns {Object} 
+    	*/
+        _domainMap: function () {
+            class2Domain = {};
+            var layRec = new GlideRecord('x_atpu_rtsm_rtsm_domain');
+            if (layRec.isValid()) {
+                layRec.addQuery('active', true);
+                layRec.query();
+                while (layRec.next()) {
+                    var layer = layRec.getValue('name');
+                    var classesIncluded = layRec.getValue('classes_included');
+                    if (!gs.nil(classesIncluded)) {
+                        var subclasses = JSON.parse(classesIncluded);
+                        for (var i = 0; i < subclasses.length; i++) {
+                            class2Domain[subclasses[i]] = layer;
+                        }
+                    }
+                }
+            }
+            // this.log.logObject(class2Domain, '[_domainMap]');
+            return class2Domain;
+        },
+        /**SNDOC
+            @name modelDomainsRank
+            @description Object that maps model layer names to their sequence number
+            @returns {Object} Object that maps model layer names to their sequence number
+            */
+        domainsRank: function () {
+            domains = {};
+            var domainRec = new GlideRecord('x_atpu_rtsm_rtsm_domain');
+            if (domainRec.isValid()) {
+                domainRec.addQuery('active', true);
+                domainRec.query();
+                while (domainRec.next()) {
+                    domains[domainRec.getValue('name')] = domainRec.getValue('sequence');
+                }
+            }
+            // this.log.logObject(domains, '[modelDomainsRank]');
+            return domains;
+        },
+    
+        /**SNDOC
+        @name getDomainOfClass
+        @description return the model_layer a given class belongs to
+        @returns {GlideRecord(model_layer)} the model_layer of the clazz
+        */
+        getDomainOfClass: function (clazz) {
+            if (clazz in this.domainMap) {
+                this.log.debug('[IRR] getDomainOfClass: '  + clazz + ' / ' + this.domainMap[clazz]);
+                return this.domainMap[clazz];
+            } else {
+                this.log.debug('[IRR] getDomainOfClass Default Domain: ' + clazz + ' / ' +  this.defaultDomain);
+                return this.defaultDomain;
+            }
+        },         
+   
+  /*
+        Access Functions for Domain ManagerMap
+    */
+    /**SNDOC
+    	@name _domainManagerMap
+    	@description Create the mapping of table names to model layer names for fast lookup
+    	@returns {Object} 
+    	*/
+        _domainManagerMap: function () {
+            class2DomainManager = {};
+            var layRec = new GlideRecord('x_atpu_rtsm_rtsm_domain');
+            if (layRec.isValid()) {
+                layRec.addQuery('active', true);
+                layRec.query();
+                while (layRec.next()) {
+                    var layer = layRec.getValue('manager');
+                    var classesIncluded = layRec.getValue('classes_included');
+                    if (!gs.nil(classesIncluded)) {
+                        var subclasses = JSON.parse(classesIncluded);
+                        for (var i = 0; i < subclasses.length; i++) {
+                            class2DomainManager[subclasses[i]] = layer;
+                        }
+                    }
+                }
+            }
+            return class2DomainManager;
+        },
+
+        /**SNDOC
+        @name getDomainManagerOfClass
+        @description return the model_layer a given class belongs to
+        @returns {String} the Domain Manager
+        */
+        getDomainManagerOfClass: function (clazz) {
+            if (clazz in this.domainManagerMap) {
+                this.log.trace('[IRR] getDomainManagerOfClass: ' + clazz + ' / ' + this.domainManagerMap[clazz]);
+                return this.domainManagerMap[clazz];
+            } else {
+                this.log.trace('[IRR] getDomainManagerOfClass Default Domain: ' + clazz + ' / ' + this.defaultDomainManager);
+                return this.defaultDomainManager;
+            }
+        },         
+
+       type: 'IRR'
+   };
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-02-11 09:43:27</sys_created_on>
+        <sys_id>8766a1cddb12a410689c22d4059619c5</sys_id>
+        <sys_mod_count>73</sys_mod_count>
+        <sys_name>IRR</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_8766a1cddb12a410689c22d4059619c5</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:31:18</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.APIForCMDBQB</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>API to the OoB application CMDB Query Builder</description>
+        <name>APIForCMDBQB</name>
+        <script><![CDATA[/**SNDOC
+	@name APIForCMDBQB
+	@description API to the OoB application CMDB Query Builder
+	@domain CMDB Query Register
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var APIForCMDBQB = Class.create();
+APIForCMDBQB.prototype = {
+
+	initialize: function() {
+		this.log = new RTSMLog(RTSMLog.LOG_DM_CMDB_QUERY_REG, "APIForCMDBQB");
+
+		this.grQuery = null;
+		this.grQueryStatus = null;
+		this.grQueryResults = null;
+
+		this.queryTriggerTime = null;
+		this.ciRelationColumnNames = [];
+		this.error = "";
+
+	},	
+
+	/**SNDOC
+	 * @name getQbTotalRunTime
+	 * @description Query Execution time calculated by OoB CMDB Query Builder
+	 * @returns {Integer} Query Execution time calculated by OoB CMDB Query Builder
+	 */
+	getQbTotalRunTime: function() {
+
+		if (this.grQueryStatus == null) {
+			return 0;
+		}
+		else {
+			return this.grQueryStatus.run_time;
+		}				
+	},
+
+	/**SNDOC
+	 * @name getQbStatus
+	 * @description Status from OoB CMDB Query Builder run, e.g. Complete, Failed, Max Limit, Paused, Processing, Ready, Time Out
+	 * @returns {String} Status from OoB CMDB Query Builder run, e.g. Complete, Failed, Max Limit, Paused, Processing, Ready, Time Out
+	 */
+	getQbStatus: function() {
+
+		if (this.grQueryStatus == null) {
+			return "";
+		}
+		else {
+			return this.grQueryStatus.status;
+		}				
+	},
+
+	/**SNDOC
+	 * @name getQbQueryStatus
+	 * @description get QB Status entry in the OoB table qb_query_status table
+	 * @returns {String} Reference to the created QB Status entry in the OoB table qb_query_status table
+	 */
+	getQbQueryStatus: function() {
+
+		if (this.grQueryStatus == null) {
+			return "";
+		}
+		else {
+			return this.grQueryStatus.getValue("sys_id");
+		}	
+	},
+
+	/**SNDOC
+	 * @name runQuery
+     * @description Executes one query at a time from the OoB CMDB Query Builder table 
+	 * @param {String} [sys_id] - sys_id of a Query Builder query to run
+	 * @returns {Boolean} true -> Run was successful, false -> Error while starting the run of a query
+	 */	
+	runQuery: function(querySysId) {
+		this.log.debug("Start [runQuery]");
+
+		//Query QB Saved Query table
+		var grQbQuery = new GlideRecord('qb_saved_query');
+		var result = grQbQuery.get(querySysId);
+		this.log.debug('querySysId = ' + querySysId );
+		this.log.debug('result = ' + result );
+		
+		if (result === false) {
+			this.error = "CMDB Query Builder query with sys_id [" + querySysId + "] could not be loaded from database";
+			this.log.error("[runQuery] " + this.error);
+			this.log.debug("End [runQuery] Error= " + this.error);
+			return false;
+		}
+		this.log.logObject(grQbQuery, "grQbQuery" );
+
+		//Store the saved query GlideRecord into member 'grQuery'
+		this.grQuery = grQbQuery;
+
+		//Get Current Time and store in member "queryTriggerTime"
+		this.queryTriggerTime = new GlideDateTime();
+
+		this.log.info("[runQuery] QB Saved Query = " + querySysId + ", Query Trigger Time= " +this.queryTriggerTime);
+
+		var grSysAutoQB = new GlideRecord('sysauto_query_builder');
+		grSysAutoQB.initialize();
+		grSysAutoQB.name = 'CI Tree SP CMDB Data Import';
+		grSysAutoQB.active = true; 
+		grSysAutoQB.run_type = 'once';
+		grSysAutoQB.sys_scope = RTSMInternalUtil.getRTSMScopeID();
+		grSysAutoQB.query = querySysId;
+
+		var rec = grSysAutoQB.insert();
+
+		if(rec == null) {
+			this.error = "sysauto_query_builder entry for the CMDB Query Builder query with name [ " + this.grQuery.name + " ] and sys_id [" + querySysId + "] could not be inserted into the  database";
+			this.log.error("[runQuery] " + this.error);
+			this.log.debug("End [runQuery] Error= " + this.error);
+			return false;
+		}
+		this.log.debug("End [runQuery]");
+		return true;
+	},
+
+	/**SNDOC
+	 * @name waitQueryFinished
+     * @description Waits for a triggered query to be finished 
+	 * @param {Integer} [Wait] - time in seconds to wait for the Query to finish
+	 * @returns {Boolean} true -> Query run is finished in time, false -> Query run was not finished in time or another error happened
+	 */	
+	waitQueryFinished: function(maxQueryRunTime) {
+		this.log.debug("Start [waitQueryFinished]");
+
+		var maxQueryRunTimeMillis = maxQueryRunTime * 1000;
+		this.log.debug("maxQueryRunTimeMillis= " + maxQueryRunTimeMillis);
+
+		//Check if member "grQuery" is null 
+		if (!this.grQuery) {
+			this.error = "Query has to be run before querying the finishing of it. Please first call runQuery";
+			this.log.error("[waitQueryFinished] "+this.error);
+			this.log.debug("End [waitQueryFinished] Error=" + his.error);
+			return false;
+		}
+
+		//Get current Time as startTime
+		var startTime = new GlideDateTime();
+		var currentTime;
+		var diff;		
+		//Get current User
+		this.cmdbQbUser = gs.getUserName();
+
+		this.log.info("[waitQueryFinished] Current User= " + this.cmdbQbUser + " Query Trigger Time= " +this.queryTriggerTime);
+
+		//Get query trigger time as String 
+		this.queryTriggerTimeString = "\'" + this.queryTriggerTime + "\'";
+
+		do {
+
+			this.grQueryStatus= new GlideRecord('qb_query_status');
+			//TODO AR always system
+			//this.grQueryStatus.addQuery('sys_created_by', this.cmdbQbUser);
+			//this.grQueryStatus.addQuery('sys_created_on','>=', this.queryTriggerTimeString);
+			this.grQueryStatus.addQuery('sys_created_on','>=', this.queryTriggerTime);
+			this.grQueryStatus.orderByDesc('sys_created_on');
+			this.grQueryStatus.query();
+			this.log.debug('this.grQueryStatusb_query_status' + RTSMLog.logQuery(this.grQueryStatus));			
+
+			currentTime = new GlideDateTime();
+
+			diff = GlideDateTime.subtract(startTime, currentTime).getNumericValue();
+
+			this.log.info("[waitQueryFinished] currentTime=" +currentTime + " ,startTime=" +startTime+ ", Diff=" +diff);
+
+			if(this.grQueryStatus.next()) {
+				this.log.info("[waitQueryFinished] Query Status, sys_id = " +this.grQueryStatus.sys_id);
+				this.log.info("[waitQueryFinished] Query Status= " +this.grQueryStatus.status);
+				//Variable 'status' of member "grQueryStatus" is PROCESSING or READY ? 					
+				if (this.grQueryStatus.status == "PROCESSING" || this.grQueryStatus.status == "READY") {
+
+					if (diff >= maxQueryRunTimeMillis) {
+						//Query timed out
+						this.error = "Execution of the CMDB Query Builder query with name [" + this.grQuery.name + "] and sys_id [" + this.grQuery.getValue("sys_id") + "] takes longer than configured maximum runtime of " + maxQueryRunTime + " seconds";
+						this.log.error("[waitQueryFinished] " +this.error);
+						this.log.debug("End [waitQueryFinished] Error= " + this.error);
+						return false;					
+					}
+					else {
+						this.log.info("[waitQueryFinished] Wait 2 secs for the query to finish. Sleep.................");
+						//Wait 2 secs for the query to finish	
+						global.RTSMGlobalScopeUtils.sleep(2000);
+					}
+				}
+				else {
+					//Query execution finished in time 
+					this.log.info("[waitQueryFinished] Query execution finished in time with Status= " +this.grQueryStatus.status);
+					this.log.debug("End [waitQueryFinished]");
+					return true;
+				}
+			}				
+			else {
+				// No entry in QB query status table
+				this.log.info("[waitQueryFinished] No entry in QB query status table");
+				if (diff >= maxQueryRunTimeMillis) {
+					//Query timed out
+					this.error = "Execution of the CMDB Query Builder query with name [" + this.grQuery.name + "] and sys_id [" + this.grQuery.getValue("sys_id") + "] takes longer than configured maximum runtime of " + maxQueryRunTime + " seconds";
+					this.log.error("[waitQueryFinished] " +this.error);
+					this.log.debug("End [waitQueryFinished] Error= " + this.error);
+					return false;					
+				}
+				else {
+					this.log.info("[waitQueryFinished] Wait 2 secs for the query to finish.Sleep................. ");
+					//Wait 2 secs for the query to finish	
+					global.RTSMGlobalScopeUtils.sleep(2000);
+				}									
+			}								
+
+		} while( diff < maxQueryRunTimeMillis );					
+
+	},	
+
+	/**SNDOC
+	 * @name isRunSuccessful
+     * @description Checks whether a query run was successful or not 
+	 * @returns {Boolean} true ->The run of the Query was successful, false ->Run of the Query was NOT successful. 
+	 */	
+	isRunSuccessful: function() {
+		this.log.debug("Start [isRunSuccessful]");
+
+		//Check if member "grQuery" is null 
+		if (!this.grQuery) {
+			this.error = "Query has to be run before querying the success of it. Please first call runQuery";
+			this.log.error("[isRunSuccessful] "+this.error);
+			this.log.debug("End [isRunSuccessful] Error= " + this.error);
+			return false;
+		}
+
+		if (this.grQueryStatus.status == "COMPLETE") {
+			this.log.debug("End [isRunSuccessful]");
+			return true;
+		}
+		else {
+			this.error = "The Status of the CMDB Query Builder query with name [" + this.grQuery.name + "] and sys_id [" + this.grQuery.getValue("sys_id") + "] is " +this.grQueryStatus.status + ". The query run failed";
+			this.log.error("[isRunSuccessful] "+this.error);
+			this.log.debug("End [isRunSuccessful] Error= " + this.error);
+			return false;
+		}
+	},
+
+	/**SNDOC
+	 * @name getCIRelations
+     * @description Get all CI Relations as returned by the CMDB Query Builder query run
+	 * @returns {Object} an anonymous object{success:boolean, data:Hash with sys_ids of CI Relations (cmdb_rel_ci) from results of the CMDB Query Builder query run} 
+	 */	
+	getCIRelations: function() {
+		this.log.debug("Start [getCIRelations]");
+
+		//Declare the properties for anonymous object to be returned
+		var success;
+		var data = Object.create(null);
+
+		//Check if member "grQuery" is null 
+		if (!this.grQuery) {
+			this.error = "Query has to be run before querying the resulting CI Relations of it. Please first call runQuery";
+			this.log.error("[getCIRelations] "+this.error);
+			success = false;
+			
+			this.log.debug("End [getCIRelations] Error= " + this.error);
+			return { 'success': success, 'data': data };
+		}
+
+		this.log.debug("[getCIRelations] before initResultsCIRelations");
+		this.initResultsCIRelations();
+		this.log.debug("[getCIRelations] after initResultsCIRelations");
+
+		//Check if member "ciRelationColumnNames" is empty
+		if (this.ciRelationColumnNames.length === 0) {			
+			success = true;
+			
+			this.log.debug("End [getCIRelations] XXX success= " + success);
+			this.log.debug("End [getCIRelations] XXX data= " + data);
+			return { 'success': success, 'data': data };
+		}
+
+		do {
+			//Next column from member "ciRelationColumnNames" available?
+			for ( var i=0; i < this.ciRelationColumnNames.length; i++) {
+				this.log.info("[getCIRelations] Next column from member ciRelationColumnName= " + this.ciRelationColumnNames[i]);
+
+				//Get value (sys_id of a CI Relation) from member "grQueryResults"
+				var ciRelationSysId = this.grQueryResults.getValue(this.ciRelationColumnNames[i]);
+				if (ciRelationSysId != null) {
+					this.log.info("[getCIRelations] sys_id of a CI Relation to be inserted into hash= " + ciRelationSysId);
+					this.log.info("[getCIRelations] Result count to identify record uniquely: " + this.grQueryResults.count);
+					//Insert value from member "grQueryResults" into temp hash
+					data[ciRelationSysId] = '';
+				}				
+			}			
+			this.log.info("[getCIRelations] Keys from the hash: " + Object.keys(data));
+
+		} while( this.grQueryResults.next() );
+
+		//Return the object when no more entries on member "grQueryResults" is available
+		success = true;
+		
+		this.log.debug("End [getCIRelations] success= " + success);
+
+		return { 'success': success, 'data': data };
+	},
+
+	/**SNDOC
+     * @name initResultsCIRelations
+	 * @description Initializes the member "ciRelationColumnNames" from CMDB Query Builder result table 
+	 */
+	initResultsCIRelations: function() {
+		this.log.debug("Start [initResultsCIRelations]");
+		var fields = [];
+		//Get results table name
+		this.log.info("[initResultsCIRelations] Query Results table name= " +this.grQueryStatus.table_name);
+
+		//Query the query result table
+		global.RTSMGlobalScopeUtils.setCrossScope(this.grQueryStatus.table_name, true);	
+		this.grQueryResults = new GlideRecord(this.grQueryStatus.table_name);
+		//TODO AR always system		
+		//this.grQueryResults.addQuery('sys_created_by', this.cmdbQbUser);
+		//this.grQueryResults.addQuery('sys_created_on','>=', this.queryTriggerTimeString);
+		this.grQueryResults.addQuery('sys_created_on','>=', this.queryTriggerTime);
+		this.grQueryResults.orderBy('sys_created_on');
+		this.grQueryResults.query();
+		this.log.debug('[' + this.grQueryStatus.table_name + ']' + RTSMLog.logQuery(this.grQueryResults));		
+
+		//Check if Next Entry is available
+		if (this.grQueryResults.next()) {
+			
+			this.log.info("[initResultsCIRelations] sys_id of of record from query result table " + this.grQueryResults.sys_id);	
+
+			/*
+			AR GlideRechord getFields not in Scoped Context
+			fields = this.grQueryResults.getFields();
+			this.log.logObject(fields, '[fields]');				
+			for (var i = 0; i < fields.size(); i++) {
+				var glideElement = fields.get(i);
+				this.log.debug('glideElement.getName(): ' + glideElement.getName());					
+				if (glideElement.getName().startsWith("rel_") == true && glideElement.getED().getReference() == "cmdb_rel_ci") {
+					this.log.info("[initResultsCIRelations]  " + glideElement.getName() + "\t" + glideElement);
+					//Store the column names into member "ciRelationColumnNames"
+					this.ciRelationColumnNames.push(glideElement.getName());
+				}
+			}
+			*/
+			
+			fields = this.grQueryResults.getElements();
+			this.log.debug('fields: ' + fields + ' / fields.length: ' + fields.length);			
+			for (var i = 0; i < fields.length; i++) {
+				var glideElement = fields[i];
+				// this.log.debug('glideElement.getName(): ' + glideElement.getName() + ' / ' + glideElement.getED().getReference());					
+				if (glideElement.getName().startsWith("u_rel_") == true && glideElement.getED().getReference() == "cmdb_rel_ci") {
+					this.log.debug("[initResultsCIRelations]  " + glideElement.getName() + "\t" + glideElement);
+					this.ciRelationColumnNames.push(glideElement.getName());
+				}
+			}
+			
+			this.log.debug('this.ciRelationColumnNames: ' + this.ciRelationColumnNames);			
+		}
+
+		this.log.debug("End [initResultsCIRelations]");
+	},
+
+	type: 'APIForCMDBQB'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>c4b2ea43db48c490da8325394896194b</sys_id>
+        <sys_mod_count>191</sys_mod_count>
+        <sys_name>APIForCMDBQB</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_c4b2ea43db48c490da8325394896194b</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-04-07 15:12:30</sys_updated_on>
+    </sys_script_include>
+</record_update>

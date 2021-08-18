@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="ua_table_licensing_config">
+    <ua_table_licensing_config action="INSERT_OR_UPDATE">
+        <is_fulfillment>false</is_fulfillment>
+        <license_condition/>
+        <license_model>none</license_model>
+        <license_roles/>
+        <name>x_atpu_rtsm_u_cmdb_qb_result_d39bdbb925c0c71d8b94855e67cece78038b7db9</name>
+        <op_delete>true</op_delete>
+        <op_insert>true</op_insert>
+        <op_update>true</op_update>
+        <owner_condition/>
+        <sys_class_name>ua_table_licensing_config</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-01-28 14:13:41</sys_created_on>
+        <sys_id>890ed2a8db0ea810689c22d405961919</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_atpu_rtsm_u_cmdb_qb_result_d39bdbb925c0c71d8b94855e67cece78038b7db9</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>ua_table_licensing_config_890ed2a8db0ea810689c22d405961919</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-28 14:13:41</sys_updated_on>
+    </ua_table_licensing_config>
+</record_update>

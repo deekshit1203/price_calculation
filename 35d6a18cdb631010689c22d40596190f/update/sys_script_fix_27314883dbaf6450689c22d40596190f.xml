@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <active>false</active>
+        <before>false</before>
+        <description/>
+        <flush_cache>false</flush_cache>
+        <name>RTSM: Test SubGraph</name>
+        <record_for_rollback>false</record_for_rollback>
+        <run_once>true</run_once>
+        <script><![CDATA[var idFinance = '3b5ef395dbddf700a0c18a3a48961980'; // BP Finance
+
+var id_18_2 = 'a05e7f55dbddf700a0c18a3a489619b7'; // 18.2 Perform revenue accounting
+var id_18_3_3 = '685e7f55dbddf700a0c18a3a489619ce'; // 18.3.3 Perform fixed-asset accounting
+
+var id_18_5 = 'a05e7f55dbddf700a0c18a3a489619fc'; // 18.5 Process accounts payable and expense reimbursements , childs 18.5.1 und 18.5.2
+var id_18_5_1 = '285e7f55dbddf700a0c18a3a489619fd'; // 18.5.1 Process accounts payable, chids AMEA
+var id_18_5_2 = 'ac5e7f55dbddf700a0c18a3a489619fe'; // 18.5.2 Process expense reimbursements
+var id_18_6_1_1 = '920980f7db19f300a0c18a3a48961922'; // 18.6.1.1 Establish scope and governance of treasury operations 
+
+var idAmeaPayments = 'df5cf6159f030200fe2ab0aec32e70a2'; // AMEA E-Payments
+var idSPApplication = 'F35c36959f030200fe2ab0aec32e7087';   // SharePoint-APPLICATION / Mapped Application Service / 
+var idSPExelServices = '306c36959f030200fe2ab0aec32e70b7';  // Excel Calculation Services
+
+var loop_1 = 'b6ef0e17db057c50689c22d40596198c';
+var loop_2 = 'c4ff8a57db057c50689c22d4059619e4';
+var loop_3 = '15ffc217db057c50689c22d405961913';
+var loop_4 = 'e6ff8e57db057c50689c22d4059619da';
+
+// ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout, traverseAllDomains
+
+/*
+*** Max Depth = 1
+*/
+
+// (new SubGraphAPI()).getSubGraph( idFinance, 'AR RTSM DEPTH 1', 'inbound', 0, 1, 400, 100);
+// (new SubGraphAPI()).getSubGraph( id_18_2, 'AR RTSM DEPTH 2', 'inbound', 0, 1, 400, 100);
+// (new SubGraphAPI()).getSubGraph( id_18_2, 'AR RTSM DEPTH 3', 'outbound', 0, 1, 400, 100);
+// (new SubGraphAPI()).getSubGraph( id_18_2, 'AR RTSM DEPTH 4', 'any', 0, 1, 400, 100);
+(new SubGraphAPI()).getSubGraph( id_18_3_3, 'AR RTSM DEPTH 5', 'any', 0, 1, 400, 100);
+
+// (new SubGraphAPI()).getSubGraph(idAmeaPayments,  'AR ITOM DEPTH 1', 'inbound', 0, 1, 400, 100);
+// (new SubGraphAPI()).getSubGraph(idAmeaPayments,  'AR ITOM DEPTH 2', 'outbound', 0, 1, 400, 100);
+// (new SubGraphAPI()).getSubGraph(idAmeaPayments,  'AR ITOM DEPTH 3', 'any', 0, 1, 400, 100);
+// (new SubGraphAPI()).getSubGraph(idSPExelServices, 'AR ITOM DEPTH 4', 'any', 0, 1, 30, 100);
+
+/*
+*** Regresssiontest 
+*/
+// RTSM TEST
+// (new SubGraphAPI()).getSubGraph( id_18_5_1, 'AR RTSM 1', 'outbound', 0, 100, 100, 100);
+// (new SubGraphAPI()).getSubGraph( id_18_5_2, 'AR RTSM 4', 'any', 0, 100, 400, 100);
+// (new SubGraphAPI()).getSubGraph( idFinance, 'AR RTSM 5', 'any', 0, 100, 400, 100);//
+// (new SubGraphAPI()).getSubGraph( id_18_5_1, 'AR RTSM 2', 'inbound', 0, 100, 100, 100);
+// (new SubGraphAPI()).getSubGraph( id_18_5_1, 'AR RTSM 3', 'any', 0, 100, 400, 100);
+// (new SubGraphAPI()).getSubGraph( id_18_3_3, 'AR RTSM 6', 'inbound', 0, 100, 400, 100);
+
+// // ITOM TEST
+// (new SubGraphAPI()).getSubGraph(idSPApplication, 'AR ITOM 1', 'inbound', 0, 100, 30, 100);
+// (new SubGraphAPI()).getSubGraph(idSPApplication, 'AR ITOM 2', 'outbound', 0, 100, 30, 100);
+// (new SubGraphAPI()).getSubGraph(idSPApplication, 'AR ITOM 3', 'any', 0, 100, 30, 100);
+// (new SubGraphAPI()).getSubGraph(idAmeaPayments,  'AR ITOM 4', 'inbound', 0, 100, 400, 100);
+// (new SubGraphAPI()).getSubGraph(idAmeaPayments,  'AR ITOM 5', 'outbound', 0, 100, 400, 100);
+// (new SubGraphAPI()).getSubGraph(idAmeaPayments,  'AR ITOM 6', 'any', 0, 100, 400, 100);
+
+// (new SubGraphAPI()).getSubGraph(idSPExelServices, 'AR ITOM 7', 'inbound', 0, 100, 30, 100);
+// (new SubGraphAPI()).getSubGraph(idSPExelServices, 'AR ITOM 8', 'outbound', 0, 100, 30, 100);
+// (new SubGraphAPI()).getSubGraph(idSPExelServices, 'AR ITOM 9', 'any', 0, 100, 30, 100);
+
+/*
+*** CI Loop Detection 
+*/
+// Import Query Cmplex Loop -> now in several other queries
+// (new SubGraphAPI()).getSubGraph( id_18_6_1_1, 'AR RTSM Complex Loop', 'outbound', 0, 15, 400, 100);]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-20 10:48:03</sys_created_on>
+        <sys_id>27314883dbaf6450689c22d40596190f</sys_id>
+        <sys_mod_count>267</sys_mod_count>
+        <sys_name>RTSM: Test SubGraph</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_fix_27314883dbaf6450689c22d40596190f</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-04 14:53:30</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>

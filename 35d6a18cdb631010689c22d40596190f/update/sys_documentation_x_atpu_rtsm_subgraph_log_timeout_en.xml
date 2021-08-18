@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="timeout" label="Timeout" language="en" table="x_atpu_rtsm_subgraph_log">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>timeout</element>
+            <help/>
+            <hint/>
+            <label>Timeout</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_subgraph_log</name>
+            <plural>Timeouts</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-05-06 09:17:10</sys_created_on>
+            <sys_id>5892d9a91b427010e5f386a3604bcbbe</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Timeout</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_subgraph_log_timeout_en</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-05-06 09:17:10</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

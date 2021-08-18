@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="state_potential" label="State Potential" language="en" table="x_atpu_rtsm_ci_tree_state_persistency">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>state_potential</element>
+            <help/>
+            <hint/>
+            <label>State Potential</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_ci_tree_state_persistency</name>
+            <plural>State Potentials</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>hendrik.muller</sys_created_by>
+            <sys_created_on>2020-11-11 13:47:15</sys_created_on>
+            <sys_id>688219a91b427010e5f386a3604bcbfb</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>State Potential</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_ci_tree_state_persistency_state_potential_en</sys_update_name>
+            <sys_updated_by>hendrik.muller</sys_updated_by>
+            <sys_updated_on>2020-11-11 13:47:15</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SubGraph</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>SubGraph API: SubGraph Data Structure</description>
+        <name>SubGraph</name>
+        <script><![CDATA[var SubGraph = Class.create();
+SubGraph.prototype = {
+    initialize: function() {
+        this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "API");  
+        // this.log.debug('[SubGraph][initialize] ' + 'Start');
+        
+        this.graph = {
+            reqProps: { // properties of sub-graph request
+                ctxObjId: "sysid", 
+                idSpace: "idSpace",
+                direction: "inbound", 
+                maxSeverity:5, 
+                maxDepth:3, // Radius
+                limit: 5,
+                timeout: 10
+            },
+            count: { // count-properties of sub-graph
+                vertices: 0, // int: the number of vertices in the result
+                edges: 0, // int: the number of edges in the result
+                maxDepthOutbound: 0, // max graph Depth in direction outbound     
+                maxDepthInbound: 0 // max graph Depth in direction inbound   
+            },
+            vertices: [],
+            edges: [],
+            result: {
+                code: SubGraphUtil.OK,
+                msg: SubGraphUtil.OK            
+            }
+        };
+
+        this.connectors = {
+            vertices: [],            
+            result: {
+                code: SubGraphUtil.OK,
+                msg: SubGraphUtil.OK            
+            }
+        };
+
+        // shared property for RTSM and ITOM
+        // additional props and not in object
+        // helpers for counting etc.
+        this.shared =  {
+            bsID: "", // Business Service in case of ITOM
+            connectors: 0,    
+            depthOutbound: 0, // working depth fo r recusion outbound
+            depthInbound: 0, // working depth fo r recusion inbound  
+            verticesITOM: 0, 
+            verticesBRIDGE: 0,
+            edgesITOM: 0,
+            edgesBRIDGE: 0,
+            startTime: new GlideDateTime(),
+            verticesFound: [],
+            connectorsFound: [],
+            layersUsed:[],
+            contextObjFound: false,
+            // Loop Detection
+            countDetectedLoops: 0
+        };
+
+        this.rtsmGraph = new SubGraphRTSM(this);
+        this.itomGraph = new SubGraphITOM(this);
+
+        //  this.log.debug('[SubGraph][initialize] ' + JSON.stringify(this.graph));
+    },
+
+    /* TODO AR 2021-07-07
+        Maybe we have a Problem with Manager of Connector CIs
+        if we come from ITOM ctx the connector is managed by ITOM
+        if we come from BRIDGE ctx the connector is managed by BRIDGE 
+
+        The easiest way to correct this:
+        Edges post-processing: if the object is a connector, set the manager to ITOM or BRDIGE.
+
+    */
+
+    buildSubGraph: function() {
+        this.log.debug('[SubGraph][buildSubGraph] ' + 'Start');
+        var reqProps = this.graph.reqProps;
+
+        if ((new SubGraphUtil()).getDomain(reqProps.ctxObjId) == RTSMConst.Manager_Itom) {
+            this.log.debug('[SubGraph][buildSubGraph] ' + 'ITOM');
+
+            //AR PN-328
+            // Special Case: Context Object is Connector CI (Business Service), managed by ITOM
+            var isBS = (new SubGraphUtil()).isConnector(reqProps.ctxObjId);
+            this.log.debug('[SubGraph][buildSubGraph] isBS: ' + isBS);
+
+            if (isBS) {
+
+                this.shared.bsID = reqProps.ctxObjId;
+
+                this.log.debug('[buildSubGraph] ctxobj = connector: bsID: ' + this.shared.bsID); 
+
+                if (reqProps.direction == SubGraphUtil.direction['inbound']){
+                    this.log.debug('[buildSubGraph] ctxobj = connector: inbound: buildSubGraphITOM'); 
+                    this.itomGraph.buildSubGraphITOM(this.graph.reqProps.ctxObjId, reqProps.direction);   
+                }  else if (reqProps.direction == SubGraphUtil.direction['outbound']) {
+                    this.log.debug('[buildSubGraph] ctxobj = connector: outbound: buildSubGraphRTSM'); 
+                    this.rtsmGraph.buildSubGraphRTSM(this.graph.reqProps.ctxObjId, reqProps.direction);  
+
+                    // now we correct the BS vertice
+                    // in case of ctx object = BS and direction is outbound we must correct Manager and the data source to ITOM
+                    var vtxConnector = null;
+                    vtxConnector = SubGraphUtil.getConnector(this.graph.vertices, this.shared.bsID);
+                    if (!((new global.ArrayUtil()).contains(this.shared.connectorsFound, vtxConnector.id))) {
+                        this.connectors.vertices.push(vtxConnector);
+                        this.shared.connectorsFound.push(vtxConnector.id);
+                        this.shared.connectors++;  
+                        // this.shared.verticesITOM++;  
+                        // this.shared.verticesBRIDGE--;                                     
+                        this.log.debug('[buildSubGraph] ctxobj = connector: push connector: ' + JSON.stringify(vtxConnector)); 
+                    }
+
+                } else {
+                    this.log.debug('[buildSubGraph] ctxobj = connector: any: buildSubGraphITOM'); 
+                    this.itomGraph.buildSubGraphITOM(this.graph.reqProps.ctxObjId, SubGraphUtil.direction['inbound']); 
+                    this.log.debug('[buildSubGraph] ctxobj = connector: any: buildSubGraphRTSM'); 
+                    this.rtsmGraph.buildSubGraphRTSM(this.graph.reqProps.ctxObjId, SubGraphUtil.direction['outbound']); 
+                }
+
+            } else {
+                //AR 2021-06-28 PN-301
+                // one CI can be member of several business services
+                // for example: business_service.nameLIKEE-Payments^applies_to_element_type=CI^child_idSTARTSWITHf35c36959f030200fe2ab0aec32e7087
+                // Child SharePoint-APPLICATION 	f35c36959f030200fe2ab0aec32e7087
+                // BS AMEA E-Payments + North America E-Payments
+                var igel = new GlideRecord(SubGraphUtil.tableITOM["em_impact_graph"]);
+                igel.addQuery('child_id', this.graph.reqProps.ctxObjId);
+                igel.query();
+                this.log.debug('[buildSubGraph] Calc BS: ' + RTSMLog.logQuery(igel));
+                while (igel.next()) {
+                    this.shared.bsID = igel.getValue('business_service');
+
+                    this.log.debug('[buildSubGraph] this.shared.bsID: ' + this.shared.bsID + ' / Child: ' + igel.getValue('child_id') + ' / Parent: ' + igel.getValue('parent_id')); 
+
+                    if (reqProps.direction == SubGraphUtil.direction['any']) {                  
+                        this.itomGraph.buildSubGraphITOM(this.graph.reqProps.ctxObjId, SubGraphUtil.direction['inbound']); 
+                        this.itomGraph.buildSubGraphITOM(this.graph.reqProps.ctxObjId, SubGraphUtil.direction['outbound']); 
+                    } else {
+                        this.itomGraph.buildSubGraphITOM(this.graph.reqProps.ctxObjId, reqProps.direction);   
+                    }                               
+                }
+            }
+        } else {
+            this.log.debug('[SubGraph][buildSubGraph] ' + 'BRIDGE');            
+            if (reqProps.direction == SubGraphUtil.direction['any']) {
+                this.rtsmGraph.buildSubGraphRTSM(this.graph.reqProps.ctxObjId, SubGraphUtil.direction['inbound']);
+                this.rtsmGraph.buildSubGraphRTSM(this.graph.reqProps.ctxObjId, SubGraphUtil.direction['outbound']);
+            } else {
+                this.rtsmGraph.buildSubGraphRTSM(this.graph.reqProps.ctxObjId, reqProps.direction);               
+            }
+        }
+
+         if (this.graph.result.code == SubGraphUtil.OK) 
+            this.serialize('info', 'Final');
+
+        // this.log.debug('[SubGraph][buildSubGraph] ' + JSON.stringify(this.graph));
+        //return this.graph;
+    },
+
+    setResult: function(code, msg)  {       
+        this.graph.result.code = code;    
+        this.graph.result.msg = (global.JSUtil.nil(SubGraphUtil.error[code])) ? SubGraphUtil.error['undefined'] : SubGraphUtil.error[code];  
+        this.graph.result.msg = (!global.JSUtil.nil(msg)) ? (this.graph.result.msg + '(' + msg + ')') : null;
+        // copy result from graph to connector
+        this.connectors.result.code = this.graph.result.code;  
+        this.connectors.result.msg = this.graph.result.msg;  
+
+        this.serialize('error', 'Error Exit');
+    },
+
+    serialize: function(level, tag) {
+        var logLevel = (new RTSMUtil()).getProperty(RTSMConst.subgraph_log_level);
+        if (global.JSUtil.nil(logLevel)) logLevel = 'off';
+        if ( !(logLevel == 'on' || (logLevel == 'error' && this.graph.result.code != SubGraphUtil.OK) )) 
+            return;
+
+        var grSG = new GlideRecord('x_atpu_rtsm_subgraph_log');
+
+        grSG.setValue('tag', gs.getUserName());
+        grSG.setValue('level', level);
+
+        grSG.setValue('ctxobjid', this.graph.reqProps.ctxObjId);
+        grSG.setValue('idspace', this.graph.reqProps.idSpace);
+        grSG.setValue('direction', this.graph.reqProps.direction);
+        grSG.setValue('maxseverity', this.graph.reqProps.maxSeverity);
+        grSG.setValue('maxdepth', this.graph.reqProps.maxDepth);
+        grSG.setValue('limit', this.graph.reqProps.limit);
+        grSG.setValue('timeout', this.graph.reqProps.timeout);
+
+        grSG.setValue('starttime', this.shared.startTime);
+        grSG.setValue('endtime', new GlideDateTime().getLocalTime());
+        grSG.setValue('duration', GlideDateTime.subtract(this.shared.startTime, new GlideDateTime()).getNumericValue());
+
+        grSG.setValue('result_code', this.graph.result.code);
+        grSG.setValue('result_message', this.graph.result.msg);
+ 
+        if (this.graph.reqProps.maxDepth == 1) {
+            grSG.setValue('max_graph_depth_inbound', -1);
+            grSG.setValue('max_graph_depth_outbound', -1);
+        } else {
+            grSG.setValue('max_graph_depth_inbound', this.graph.count.maxDepthInbound);
+            grSG.setValue('max_graph_depth_outbound', this.graph.count.maxDepthOutbound);
+        }
+
+        grSG.setValue('countedges', this.graph.count.edges);
+        grSG.setValue('countvertices', this.graph.count.vertices);
+        grSG.setValue('bridge_count_edges', this.shared.edgesBRIDGE);
+        grSG.setValue('bridge_count_vertices', this.shared.verticesBRIDGE);
+        grSG.setValue('itom_count_edges', this.shared.edgesITOM);
+        grSG.setValue('itom_count_vertices', this.shared.verticesITOM);
+        grSG.setValue('detected_loops', this.shared.countDetectedLoops);
+
+        grSG.setValue('connectors', JSON.stringify(this.connectors));
+        grSG.setValue('graph', JSON.stringify(this.graph));
+        grSG.setValue('graphsize', JSON.stringify(this.graph).length);
+        grSG.setValue('result', JSON.stringify(this.graph.result));
+        // grSG.setValue('edges', JSON.stringify(this.graph.edges));
+        // grSG.setValue('vertices', JSON.stringify(this.graph.vertices));
+        grSG.setValue('shared', JSON.stringify(this.shared));
+
+        grSG.insert();
+    },
+
+    type: 'SubGraph'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-20 10:46:54</sys_created_on>
+        <sys_id>e5e04843dbaf6450689c22d405961921</sys_id>
+        <sys_mod_count>141</sys_mod_count>
+        <sys_name>SubGraph</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_e5e04843dbaf6450689c22d405961921</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-03 10:10:57</sys_updated_on>
+    </sys_script_include>
+</record_update>

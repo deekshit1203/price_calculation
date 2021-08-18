@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessor</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Generic Father class of all CI Tree SP Processors</description>
+        <name>CITreeSPProcessor</name>
+        <script><![CDATA[/**SNDOC
+    @name CITreeSPProcessor
+    @description 
+    @domain Impact Calculation
+    @author ATF2SEV
+    @version 1.0.0
+    */
+var CITreeSPProcessor = Class.create();
+CITreeSPProcessor.prototype = {
+    initialize: function () {
+        this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessor");	
+        
+        this.result = new ProcessingResult();
+
+        // Number of triggered Customers for Data Filter step
+        this.triggeredCustomers = 0;
+
+        // Number of Unique CI Relations in total for all Queries and Customers in scope
+        this.totalUniqueCIRelationCount = 0;
+		
+		this.qState = RTSMConst.QueueState;
+    },
+
+    /**SNDOC
+        @name process
+        @description Generic process function to be overriden by Child Classes
+        @author ATF2
+        */
+    process: function () {
+        //gs.log("ERROR - should be implemented");
+
+    },
+    /**SNDOC
+    @name setQueueEntry
+    @description setter for `queueEntry`
+    @param {*} [queueEntry] 
+     */
+    setQueueEntry: function (queueEntry) {
+        this.queueEntry = queueEntry;
+    },
+
+    /**SNDOC
+        @name getResult
+        @description getter for `result`
+        @returns {ProcessingResult} result
+        */
+    getResult: function () {
+        return this.result;
+    },
+
+    /**SNDOC
+     * @name setError
+     * @description Sets the internal ProcessingResult to error state incl. message
+     * 
+      @param {String} [error] - Error message to be stored in the Processing Result
+     */
+    setError: function (error) {
+        this.result.setError(error);
+    },
+
+    /**SNDOC
+      @name triggerDataFilter
+      @description Insert a Data filter into the processing queue
+      @param {*} [importCustomersObj] - tbd
+      @returns {Boolean} true if success
+     */
+
+    //TODO: clarify import object and functionality
+    triggerDataFilter: function (importCustomersObj) {
+        this.log.debug('Start triggerDataFilter');
+
+        this.triggeredCustomers = 0;
+        var customerInfo = {
+            customer: '',
+            queueData: ''
+        };
+        // this.log.logObject(importCustomersObj, 'triggerDataFilter: importCustomersObj');
+
+        var factory = new SerializerFactory();
+        var funnelFiller = new FunnelFiller();
+
+        var managers = importCustomersObj.getManagers();
+        this.log.info('triggerDataFilter : Create serializer for Manager: ' + Object.keys(managers));
+        this.log.logObject(managers, 'triggerDataFilter: managers');
+
+        //TODO ARCOM In case of Customer Query managers is empty
+
+        for (var key in managers) {
+
+            var ciRelManager = managers[key];
+
+            var serializer = factory.createSerializer(RTSMConst.QO.cmdbFilterCustomer, ciRelManager.getObjectType(), ciRelManager.customer);
+            this.log.info('triggerDataFilter : Customer from Manager: ' + ciRelManager.customer);
+
+            var serialise = serializer.serialize(ciRelManager);
+            this.log.info('triggerDataFilter : Serialising the Managers data - ' + serialise);
+
+            if (serialise) {
+                customerInfo.customer = ciRelManager.customer;
+                customerInfo.queueData = serializer.getFirstQueueData();
+
+                // ARCOM Generate next queue entry
+                funnelFiller.insert(RTSMConst.QO.cmdbFilterCustomer, customerInfo);
+
+                this.triggeredCustomers++;
+                this.log.info('triggerDataFilter : Inserted entry in funnel filler and customer count incresed by 1 - ' + this.triggeredCustomers + ", Customer = " + customerInfo.customer);
+
+                var count = ciRelManager.getUniqueCIRelationCount();
+                this.log.info('triggerDataFilter : Unique CI Relation Count - ' + count);
+
+                this.totalUniqueCIRelationCount = this.totalUniqueCIRelationCount + count;
+                this.log.info('triggerDataFilter : Unique CI Relation Count + triggers customers - ' + this.totalUniqueCIRelationCount);
+
+            } else {
+                this.error = serializer.getError();
+                return false;
+            }
+
+        }
+
+        this.log.debug('End triggerDataFilter');
+
+        return true;
+    },
+
+    /**SNDOC
+     @name triggerRecalcCI
+     @description Insert a "recalcCI" action into the processing queue.
+     @param {String} [ciSysId] - the sys_id of the CI to be recalculated
+     @param {CIRelation} [ciRelationObj] - CI relations to be considered during ci calculation. Optional.
+     */
+    triggerRecalcCI: function (ciSysId, ciRelationObj) {
+        this.log.debug("[triggerRecalcCI] Start");
+        var customerDomain;
+        var queueDataSysId;
+        this.filler = new FunnelFiller();
+        var factory = new SerializerFactory();
+        var dataType = new CIRelation().getObjectType();
+        var custSysID = this.queueEntry.getValue("customer");
+
+        this.log.info("Customer = " + custSysID);
+        if (ciRelationObj == null) {
+            this.filler.insert(RTSMConst.QO.recalcCI, {
+                ci: ciSysId, //sys_id of Child CI
+                customer: custSysID //domain from current queue entry
+            });
+            this.log.info("[triggerRecalcCI] End");
+            return;
+        } else {
+
+            var serializerObject = factory.createSerializer(RTSMConst.QO.recalcCI, dataType, custSysID);
+            var ret = serializerObject.serialize(ciRelationObj);
+
+            if (ret === false) {
+                //Serialization was NOT successful
+                this.log.debug("[triggerRecalcCI] End");
+                return;
+            }
+
+            //Serialization was successful
+            queueDataSysId = serializerObject.getFirstQueueData();
+            this.filler.insert(RTSMConst.QO.recalcCI, {
+                ci: ciSysId,
+                customer: custSysID,
+                queueData: queueDataSysId
+            });
+        }
+
+        this.log.debug("[triggerRecalcCI] End");
+    },
+
+    type: 'CITreeSPProcessor'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>6ff2c2b4dbd537448471a7c74896196a</sys_id>
+        <sys_mod_count>52</sys_mod_count>
+        <sys_name>CITreeSPProcessor</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_6ff2c2b4dbd537448471a7c74896196a</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-04-01 09:50:28</sys_updated_on>
+    </sys_script_include>
+</record_update>

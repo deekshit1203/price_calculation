@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_wizard_answer">
+    <sys_wizard_answer action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <answer>New AR:  PHHC  -SubGraph-Query Results</answer>
+        <button_label/>
+        <dependent_value/>
+        <element/>
+        <name>AR:  PHHC  -SubGraph-Query Results</name>
+        <next_question/>
+        <order>100</order>
+        <payload_name/>
+        <question display_value="Query Builder Results" name="Query Builder Results">28b4f4d51b423010e5f386a3604bcb62</question>
+        <roles/>
+        <script/>
+        <sys_class_name>sys_wizard_answer</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-08-10 08:00:03</sys_created_on>
+        <sys_id>53ec00cb1b35309051d64261cd4bcbed</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>AR:  PHHC  -SubGraph-Query Results</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_wizard_answer_53ec00cb1b35309051d64261cd4bcbed</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-10 08:00:03</sys_updated_on>
+        <table/>
+        <target_url>x_atpu_rtsm_u_cmdb_qb_result_85f9c2c55c394dd1c79f0810dd02c633b6a00cf2.do</target_url>
+        <type>1</type>
+    </sys_wizard_answer>
+</record_update>

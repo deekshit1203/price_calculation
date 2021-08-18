@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorDisconnectCIs</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include processes the Queue operation "disconnectCIs". The Script Include is extended from the SI "CITreeSPProcessor"</description>
+        <name>CITreeSPProcessorDisconnectCIs</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessorDisconnectCIs
+	@description Process a request in the CI Tree SP Queue of Type "disconnectCIs"
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorDisconnectCIs = Class.create();
+CITreeSPProcessorDisconnectCIs.prototype = Object.extendsObject(CITreeSPProcessor, {
+	initialize: function () {
+		CITreeSPProcessor.prototype.initialize.call(this);
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorDisconnectCIs");	
+	},
+	/**SNDOC
+	@name process
+	@description  Process a request in the CI Tree SP Queue of Type "disconnectCIs"
+	*/
+	process: function () {
+		this.log.debug("[process] Start");
+		var ciRelObj;
+		var factory = new SerializerFactory();
+		var ciRelation = new CMDBCIRelation();
+		var dataType = new CIRelation().getObjectType();
+
+		try {
+			var custSysID = this.queueEntry.getValue("customer");
+			var ciDomainSysId = this.queueEntry.getValue("sys_domain");
+
+			//Create a Serializer object using the SerializerFactory
+			var serializerObject = factory.createSerializer(RTSMConst.QO.disconnectCIs, dataType, custSysID);
+			ciRelObj = serializerObject.deserialize(this.queueEntry.getValue("queue_data"));
+
+			if (ciRelObj === null) {
+				//De-serialization was NOT successful, Set Processing Result
+				this.error = "Deserialization of Queue Data (" + "CI Relation to delete" + ") of queue entry [" + this.queueEntry.getValue("sys_id") + "] failed.";
+				this.setError(this.error);
+				this.log.error("[process] " + this.error);
+				this.log.debug("[process] End");
+				return;
+			}
+
+			//De-serialization was successful
+			ciRelation.lock(ciRelObj);
+			var ret = ciRelation.deleteCIRelation(ciRelObj);
+			ciRelation.unlock();
+
+			if (ret === false) {
+				this.log.error("[process] De-serialization was successful but deletion of CI Relation returned false");
+				//Set Processing Result
+				this.result.setOk();
+				this.result.validLeaves = 0;
+				this.result.deadLeaves = 0;
+				this.result.uniqueCis = 0;
+				this.log.debug("[process] End");
+				return;
+			}
+
+			//CI Relation was deleted from model
+			this.log.info("[process] CI Relation was deleted from model");
+
+			// ParentCI or ChildCI is or both ParentCI and ChildCI was deleted from OOB table
+			if (!ciRelObj.parent.sys_id || !ciRelObj.child.sys_id || (!ciRelObj.parent.sys_id && !ciRelObj.child.sys_id)) {
+
+				//CI is deleted and now unconnected. CI has been removed from CI Tree SP
+				this.log.info("[process] CI is deleted from OOB table and now unconnected. CI has been removed from CI Tree SP, no recalculation is needed.");
+				//Set Processing Result
+				this.result.setOk();
+				this.result.validLeaves = 0;
+				this.result.deadLeaves = 3;
+				this.result.uniqueCis = 0;
+				return;
+			}
+
+			var childCIsArray = ciRelation.getChildCIRelations(ciRelObj.parent.sys_id);
+			if (childCIsArray.length > 0) {
+				// reset isvalid flag to false
+
+				// TODO AR Correction is wrong? Job hangs ???
+
+				// //TODO AR 2021-01-21 CSCalcHelper is a mistake, see parent in else
+				// //var updateCITreeSP = new CSCalcHelper();
+				// var updateCITreeSP = new CITreeSP();
+				// updateCITreeSP.lockSP(ciRelObj.parent.sys_id, null);
+				// //TODO AR 2021-01-25 Move to class function
+				// //updateCITreeSP.updateIsValidFlag(ciRelObj.parent.sys_id, 'false');
+				// (new CSCalcHelper()).updateIsValidFlag(ciRelObj.parent.sys_id, 'false');
+				// updateCITreeSP.unlockSP();
+
+				//TODO original
+				var updateCITreeSP = new CSCalcHelper();
+				updateCITreeSP.lockSP(ciRelObj.parent.sys_id, null);
+				updateCITreeSP.updateIsValidFlag(ciRelObj.parent.sys_id, 'false');
+				updateCITreeSP.unlockSP();
+
+				for (var i = 0; i < childCIsArray.length; i++) {
+					//Next CI Relation available in the returned array
+					this.triggerRecalcCI(childCIsArray[i].child.sys_id, childCIsArray[i]);
+				}
+
+				//Set Processing Result
+				this.result.setOk();
+				this.result.validLeaves = 0;
+				this.result.deadLeaves = 2;
+				this.result.uniqueCis = childCIsArray.length; //Number of Child CI Relations
+				this.log.debug("[process] End");
+				return;
+			} else {
+				//No Child CI connected anymore to the Parent CI. It now becomes a Root CI
+				var parentCiCount = ciRelation.getParentCIRelationCount(ciRelObj.parent.sys_id);
+				if (parentCiCount > 0) {
+					var ciTreeSP = new CITreeSP();
+					//CI is still connected upstream to other CIs
+					ciTreeSP.lockSP(ciRelObj.parent.sys_id, ciDomainSysId);
+					ciTreeSP.resetSP(ciRelObj.parent.sys_id, true);
+					ciTreeSP.unlockSP();
+					//CI is connected upstream to other CI's, a recalculation is triggered
+					this.triggerRecalcCI(ciRelObj.parent.sys_id, null);
+
+					this.log.info("[process] CI is connected upstream to other CI's, a recalculation is triggered");
+					//Set Processing Result
+					this.result.setOk();
+					this.result.validLeaves = 1;
+					this.result.deadLeaves = 0;
+					this.result.uniqueCis = 0;
+				} else {
+					//CI is totally unconnected and has been removed from CI Tree SP
+					this.log.info("[process] CI is not connected to any CI's upstream, no recalculation is needed.");
+					//Set Processing Result
+					this.result.setOk();
+					this.result.validLeaves = 0;
+					this.result.deadLeaves = 3;
+					this.result.uniqueCis = 0;
+				}
+			}
+
+		} catch (err) {
+			this.error = err.message + "\n" + err.stack;
+			this.result.setError(this.error);
+		}
+
+		this.log.debug("[process] End");
+
+	},
+
+	type: 'CITreeSPProcessorDisconnectCIs'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>797b565fdb2a04d024d2bb1a6896195e</sys_id>
+        <sys_mod_count>47</sys_mod_count>
+        <sys_name>CITreeSPProcessorDisconnectCIs</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_797b565fdb2a04d024d2bb1a6896195e</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-25 07:24:35</sys_updated_on>
+    </sys_script_include>
+</record_update>

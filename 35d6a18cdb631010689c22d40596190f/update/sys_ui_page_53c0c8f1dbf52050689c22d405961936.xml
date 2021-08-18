@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script><![CDATA[	var vcount = '${JS:sysparm_validCount}';
+	var rcount = '${JS:sysparm_reqCount}';
+		
+	if(vcount) {
+
+	//Hide the OverLay
+		$('trigger_progress').hide();
+		
+	//Display Message
+		var result = "Recalculation was successfully triggered for " +vcount+ " Customers out of "+rcount+" requested Customers. For status of recalculation please open the CI Tree SP Processing Queue.";
+		 alert(result);
+		 closeWindow();
+	}
+ 
+function closeWindow(){
+	GlideModal.get().destroy();
+	reloadWindow(window);
+}]]></client_script>
+        <description>Triggers the recalculation for CI Tree SP Enabled Customer.</description>
+        <direct>false</direct>
+        <endpoint>x_atpu_rtsm_TriggerCITreeSPRecalculateCustomersPage.do</endpoint>
+        <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+  <g:ui_form>
+	<table border="0" cellspacing="0" cellpadding="0" class="layout_outer" width="100%" height="400%">
+		<tr id = "trigger_progress">
+			<td  height="500%" width="200%" style="vertical-align:middle" align="center">
+				   <table style="margin:auto" cellspacing="0" cellpadding="0">
+						  <tr>
+								<td>
+                                     ${gs.getMessage('Triggering CI Tree SP Recalculation…… Please wait.')}
+                                     <img src="images/ajax-loader.gifx?v=2" alt="${gs.getMessage('Loading CI Tree SP enabled Customers … Please wait.')}" />
+                                </td>
+                          </tr>
+                   </table>
+			</td>
+		</tr>
+	  </table>
+	</g:ui_form>
+</j:jelly>]]></html>
+        <name>TriggerCITreeSPRecalculateCustomersPage</name>
+        <processing_script/>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-01-19 13:44:01</sys_created_on>
+        <sys_id>53c0c8f1dbf52050689c22d405961936</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TriggerCITreeSPRecalculateCustomersPage</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_ui_page_53c0c8f1dbf52050689c22d405961936</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-19 13:44:01</sys_updated_on>
+    </sys_ui_page>
+</record_update>

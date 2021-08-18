@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorCalc</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>/**
+ *   Product: Service Event Management
+ *   Application: ServiceEvent
+ *   Component: CITreeSPCalc
+ *   Functions: process, getResult, _updateResult, _alwaysCalculation, _clusterCalculation, _increaseValidLeave,
+ *   _increaseDeadLeave, _createObject
+ *   Tables Accessed: cmdb_rel_ci
+ *   Which objects call this Script Include: N/A
+ *   Purpose: Travers all CI relations of a passed child CI and calculates recursively all valid and invalid connections.
+ *   Ref: ASN-3449
+ *   Change logs: 09/13/2018 - Initial Version
+ *   Limitations: N/A
+ *   Required dependencies with version: CILoopDetector, ProcessingResult, CSAlwaysCalculator, CSClusterCalculator
+ */</description>
+        <name>CITreeSPProcessorCalc</name>
+        <script><![CDATA[	/**SNDOC
+	@name CITreeSPProcessorCalc
+	@description Travers all CI relations of a passed child CI and calculates recursively all valid and invalid connections.
+	@domain Impact Calculation
+	@author Thomas Grensemann
+	@version 1.0.0
+	*/
+	var CITreeSPProcessorCalc = Class.create();
+
+	CITreeSPProcessorCalc.prototype = Object.extendsObject(CITreeSPProcessor, {
+
+		/**SNDOC
+		@name initialize
+		@description 
+		@param {*} [alert] -  
+		@param {*} [startTime] -  
+		*/
+		initialize: function (alert, startTime) {
+			CITreeSPProcessor.prototype.initialize.call(this);
+
+			this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorCalc");
+			this.alert = alert;
+			this.startTime = startTime;
+
+			this.qResult = RTSMConst.QueueProcessingResult;		
+			this.log.debug('CITreeSPProcessorCalc initialize ' + RTSMConst.QueueState.PROCESSED);
+
+			this.result = new ProcessingResult(null, this.qResult.OK, '', RTSMConst.QueueState.PROCESSED);
+			/**SNDOC
+			@name _DURATION
+			@description  Sleep duration
+			@constance {integer}
+			@
+			*/
+			this._DURATION = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_semaphore_wait_time));
+			/**SNDOC
+			@name _MAX_RUNTIME
+			@description  Maximum limit in seconds from the system property
+			@constance {integer}
+			@
+			*/
+			this._MAX_RUNTIME = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_max_calc_runtime));
+			/**SNDOC
+			@name _STOP_TIME
+			@
+			@description  Maximum Runtime Limit
+			@constance {integer}
+			@type {number} convert maximum runtime time to milliseconds before adding to startTime
+			*/
+			this._STOP_TIME = startTime + (this._MAX_RUNTIME) * 1000;
+			/**SNDOC
+			@name _MAX_CI_COUNT
+			@description  Maximum Valid Leaves Limit
+			@constance {integer}
+			@
+			*/
+			this._MAX_CI_COUNT = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_max_calc_ci_count));
+
+			// this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorCalc");
+
+			this.ciHelper = new CIHelper();
+			this.calcHelper = new CSCalcHelper();
+		},
+		/**SNDOC
+		@name process
+		@description Processes an entry of type createAlert, updateAlert, resolveAlert, addCI OR recalcCI from the CI Tree Processing Queue table
+		@author ATF2
+		*/
+		process: function () {
+
+			this.log.debug("[process] Start");
+
+			//Get the CI Model from member "queueEntry"
+			var ciModelConfig = new SPConfig();
+
+			//Get the CI Object from member "queueEntry"
+			var ci = this.ciHelper.getCI('sys_id=' + this.queueEntry.getValue("alert_ci"));
+
+			//Call "calc" member function to calculate recursively all valid and invalid connection
+			this.calc(ci, false);
+
+			this.log.debug("[process] End");
+
+		},
+		/**SNDOC
+		@name calc
+		@description Travers all CI relations of a passed child CI and calculates recursively all valid and invalid connections.
+		@param {Object} [ci] -  Child CI that should be calculated                   
+		@param {Boolean} [cluster] -  Calculated flag
+		@param  {CILoopDetector} [loopDetector] - The loop detector to be used. Optional.
+		@returns {Object} ProcessingResult => result object tha contains all caculated values                          
+		*/
+		calc: function (ci, cluster, loopDetector) {
+			var parentRelations = [];
+			var parentRelation;
+			var parendCIs = Object.create(null);
+			var scope;
+			var semaphore = new CITreeSP();
+
+			if (!ci) {
+				this.log.error('[calc] Given CI is null!');
+				this._updateResult('Given CI is null!', this.qResult.ERROR, RTSMConst.QueueState.PROCESSED);
+
+				return this.result;
+			}
+
+			var ciSysId = ci.getValue("sys_id");
+			this.log.debug('[calc] Recursive calculation for ci with sys_id=' + ciSysId);
+
+			if (!loopDetector) {
+				loopDetector = new CILoopDetector();
+			}
+
+			//OLD
+			//parentRelations = new CMDBCIRelation().getParentCIRelations(ciSysId); // Array of CIRelation Objects
+			parentRelations = new CMDBCIRelation().getParentCIRelationSG(ciSysId); // Array of CIRelation Objects
+			this.log.debug('[calc] ParentRelationsLength=' + parentRelations.length);
+
+			for (var i = 0; i < parentRelations.length; i++) {
+				//Next CI Relation available in Array
+
+				var parentGR;
+				var parentSysId;
+				var parentCIName;
+				var parendSysClassName;
+				var childSysId;
+				var childCIName;
+				var connectionStrength;
+
+				//CI relation is in of scope
+
+				parentRelation = parentRelations[i];
+				parentSysId = parentRelation.parent.sys_id;
+				childSysId = parentRelation.child.sys_id;
+				
+				connectionStrength = parentRelation.connection_strength;
+
+				parentGR = new GlideRecord('cmdb_ci');
+				parentGR.get(parentRelation.parent.sys_id);
+
+				parentCIName = parentGR.name;
+				parendSysClassName = parentGR.sys_class_name;
+				childCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', childSysId, 'name');
+
+				var result = loopDetector.checkCIRelationForLoop(parentRelation);
+				if (result.loop) {
+					this.log.error('[calc] CI Loop detected');
+					//TODO: redefine how to trigger alert when loop detected
+					//loopDetector.createCILoopDetectedAlert(parentRelation.parent, parentRelation.child, 'CI Tree SP', this.alert);
+					this._updateResult('CI Loop detected: parentSysId=' + parentSysId + ' childSysId=' + childSysId + ' parentName=' + parentCIName + ' childName=' + childCIName, this.qResult.ERROR, RTSMConst.QueueState.PROCESSED);
+					return false;
+				} else {
+					var currentTime = new Date().getTime();
+
+					//Exit on maximum runtime reached
+					if (this._STOP_TIME < currentTime) {
+						this.log.error('[calc] Maximum Runtime reached');
+						this._updateResult('Maximum CI Tree SP calculation runtime of ' + this._MAX_RUNTIME + ' seconds is reached. Stopping the CI Tree SP calculation before CI ' + parentCIName + ' (' + parentSysId + ').', this.qResult.ERROR, RTSMConst.QueueState.PROCESSED);
+						return false;
+					}
+
+					//Exit on CI count limit breached 
+					if (this._MAX_CI_COUNT <= this.result.validLeavesCount()) {
+						this.log.error('[calc] Maximum CI Count Limit breached');
+						this._updateResult('Maximum CI Tree SP CI count limit of ' + this._MAX_CI_COUNT + ' is reached. Stopping the CI Tree SP calculation before CI ' + parentCIName + ' (' + parentSysId + ').', this.qResult.ERROR, RTSMConst.QueueState.PROCESSED);
+						return false;
+					}
+
+					if (this.ciHelper.containsConnection(connectionStrength)) {
+
+						var connections = this.ciHelper.getConnections();
+						var calulation = false;
+						var skipNextParentLevel = false;
+						this.errMesg = 'caculation error';
+
+						semaphore.lockSP(parentSysId, null);
+
+						try {
+							var unifiedImpactCalculator = new UnifiedImpactCalculator();
+							//check if connection_strength is Always
+							if (connectionStrength == connections[0]) {
+								//cluster = false;
+								//calulation = this._alwaysCalculation(parentRelation, ci, cluster);
+								calulation = unifiedImpactCalculator.calc(parentRelation, this.queueEntry.type, this.alert, ci, cluster);
+								cluster = false;
+							} else //check if connection_strength is Cluster
+								if (connectionStrength == connections[1]) {
+									//var clusterCalculator = new CSClusterCalculator();
+									//calulation = clusterCalculator.calc(parentRelation, this.queueEntry.type, this.alert, ci, cluster);
+									calulation = unifiedImpactCalculator.calc(parentRelation, this.queueEntry.type, this.alert, ci, cluster);
+									cluster = true;
+									skipNextParentLevel = unifiedImpactCalculator.skipNextParentLevel();
+								}
+							else {
+								throw (new Error("unknown connection strength: " + connectionStrength));
+							}
+
+						} catch (err) {
+							this.errMesg = err.message + "\n" + err.stack;
+							this.log.error('[calc] Calculation fails for CI sys_id= ' + ci.sys_id + ': ' + this.errMesg);
+
+						} finally {
+							semaphore.unlockSP();
+						}
+
+						if (calulation) {
+							this._increaseValidLeave(parentSysId, parendSysClassName, cluster, parendCIs, skipNextParentLevel);
+						} else {
+							this.log.error('[calc] Calculation error');
+							// To clary: calculation returns only boolean and no error message
+							//this._updateResult('calulation error', this.qResult.ERROR, RTSMConst.QueueState.PROCESSED);
+							this._updateResult(this.errMesg, this.qResult.ERROR, RTSMConst.QueueState.PROCESSED);
+
+							return false;
+						}
+
+					} else {
+						this._increaseDeadLeave(parentSysId, parendSysClassName, cluster);
+					}
+				}
+			}
+			
+			/*
+			//HN: we dont need to call this function recursively because we use SubGraph now, pending delete the code below
+			for (var object in parendCIs) {
+				var parentCI = parendCIs[object];
+				if (parentCI.skipNextParentLevel) {
+					continue;
+				}
+
+				var parent = this.ciHelper.getCI('sys_id=' + parentCI.sysId);
+
+				this.log.error('[calc] parent sysId = ' + parentCI.sysId + ', processed = ' + parentCI.processed);
+
+				var loopDetectorParent = new CILoopDetector();
+				loopDetectorParent.copyRelationsFrom(loopDetector);
+
+				//Get Copy of Relations from CILoopDetector
+				//var loopDetectorCopy = loopDetector.getCopy();
+
+				if (this.calc(parent, parentCI.cluster, loopDetectorParent) == false) {
+					return false;
+				}
+			}
+			*/
+
+			return true;
+		},
+		/**SNDOC
+		@name getResult
+		@description Result object getter 
+		@return {Object} ProcessingResult
+		*/
+		getResult: function () {
+			return this.result;
+		},
+		/**SNDOC
+		@name _updateResult
+		@description  Updates the result object
+		@param {string} [errorMessage] - 
+		@param {string} [processingResult] - 
+		@param {string} [state] - 
+		@private
+		*/
+		_updateResult: function (errorMessage, processingResult, state) {
+			this.result.setErrorMessage(errorMessage);
+			this.result.setProcessingResult(processingResult);
+			this.result.setState(state);
+		},
+		/**SNDOC
+		@name _alwaysCalculation
+		@description  Calls the CSAlwaysCalculator
+		@param {Object} [ciRelation] - 
+		@param {Object} [CI] - 
+		@param {Boolean} [cluster] - 
+		@private
+		*/
+		_alwaysCalculation: function (ciRelation, ci, cluster) {
+			var alwaysCalculator = new CSAlwaysCalculator();
+			return alwaysCalculator.calc(ciRelation, this.queueEntry.type, this.alert, ci, cluster);
+		},
+		/**SNDOC
+		@name _increaseValidLeave
+		@description  Increase Valid Leaves by 1 and updates the parendCIs object and result object
+		@param {String} [parentSysId] - 
+		@param {String} [parendSysClassName] - 
+		@param {Boolean} [cluster] - 
+		@private
+		*/
+		_increaseValidLeave: function (parentSysId, parendSysClassName, cluster, parendCIs, skipNextParentLevel) {
+			var processedObject = this._createObject(parentSysId, parendSysClassName, 'Processed', cluster, true, skipNextParentLevel);
+
+			parendCIs[parentSysId] = processedObject;
+			this.result.addValidLeaveObject(parentSysId, processedObject);
+			this.result.increaseValidLeave();
+		},
+		/**SNDOC
+		@name _increaseDeadLeave
+		@description  Increase Dead Leaves by 1 and updates result object
+		@param {String} [parentSysId] - 
+		@param {String} [parendSysClassName] - 
+		@param {Boolean} [cluster] - 
+		@private
+		*/
+		_increaseDeadLeave: function (parentSysId, parendSysClassName, cluster) {
+
+			var processedObject = this._createObject(parentSysId, parendSysClassName, 'Processed', cluster, true);
+
+			this.result.addDeadLeaveObject(parentSysId, processedObject);
+			this.result.increaseDeadLeave();
+		},
+		/**SNDOC
+		@name _createObject
+		@description  Helper object for loop detecion
+		@param {string} [sys_id] -  of the CI parent for wich loop was deteced
+		@param {String} [typ] -  of the ci 
+		*/
+		_createObject: function (sysId, parendClassName, state, cluster, processed, skipNextParentLevel) {
+			return {
+				sysId: sysId,
+				className: parendClassName,
+				state: state,
+				cluster: cluster,
+				processed: processed,
+				skipNextParentLevel: skipNextParentLevel
+			};
+		},
+
+	});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>27f407d6dbbdef00f19e6def4b9619c9</sys_id>
+        <sys_mod_count>277</sys_mod_count>
+        <sys_name>CITreeSPProcessorCalc</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_27f407d6dbbdef00f19e6def4b9619c9</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-08-11 06:33:11</sys_updated_on>
+    </sys_script_include>
+</record_update>

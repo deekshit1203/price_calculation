@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.GSLogCounter</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>- Addes a prefix and counter to log message&#13;
+- prefix is useful when multiple instances running e.g. BR on different tasks -&gt; use number or sysid&#13;
+- counter is useful when multiple log statements are done within same second and sequence is important&#13;
+- counterlevers can help reading logs by separating by loops or function calls&#13;
+&#13;
+Usage:&#13;
+=======&#13;
+new GSLogCounter({&#13;
+    property: [system property with debug level],&#13;
+    script:[source on log table],&#13;
+    prefix:[prefix of each log message],&#13;
+    useCounter:[adds a counter before each message if true],&#13;
+    timestampPrefix: [adds a timestamp before each message (ms from 1970) if true] // will be added after prefix &#13;
+});&#13;
+LogCounterObject.log(level, message);&#13;
+&#13;
+Limitations&#13;
+========&#13;
+- no leading zero on counter&#13;
+&#13;
+Hint: Examples using property set to "info"&#13;
+&#13;
+Example 1: GSLog syntax&#13;
+=====================&#13;
+var mylog = new GSLogCounter("cmtest.GSLogCounter.level", "ATOS_FAULTSERVICE_TRIGGER");&#13;
+mylog.info("test");&#13;
+mylog.log("info", "test level info");&#13;
+mylog.log("trace", "test level info");&#13;
+&#13;
+Output:&#13;
+-----------&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: test&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: test level info&#13;
+&#13;
+Example 2: CounterLevel&#13;
+====================&#13;
+var mylog = new GSLogCounter({&#13;
+    property: "cmtest.GSLogCounter.level",&#13;
+    script: "ATOS_FAULTSERVICE_TRIGGER",&#13;
+    prefix: "prefix", &#13;
+    useCounter: true,&#13;
+    useTimestamp: true&#13;
+});&#13;
+mylog.info('test 1');&#13;
+mylog.info('test 2');&#13;
+mylog.addCounterLevel();&#13;
+mylog.info('test 3.1');&#13;
+mylog.info('test 3.2');&#13;
+mylog.addCounterLevel();&#13;
+mylog.info('test 3.3.1');&#13;
+mylog.info('test 3.3.1');&#13;
+mylog.removeCounterLevel();&#13;
+mylog.info('test 3.4');&#13;
+mylog.info('test 3.5');&#13;
+mylog.addCounterLevel();&#13;
+mylog.info('test 3.6.1');&#13;
+mylog.info('test 3.6.2');&#13;
+mylog.setCounterLevel(5);&#13;
+mylog.info('test 3.6.3.1.1');&#13;
+mylog.info('test 3.6.3.1.2');&#13;
+mylog.setCounterLevel(2);&#13;
+mylog.setCounterLevel(5); // make no log -&gt; reuse counter&#13;
+mylog.setCounterLevel(2);&#13;
+mylog.info('test 3.7');&#13;
+mylog.info('test 3.8');&#13;
+mylog.resetCounter();&#13;
+mylog.info('test 1');&#13;
+mylog.info('test 2');&#13;
+&#13;
+Output&#13;
+----------&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 1 : test 1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 2 : test 2&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.1 : test 3.1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.2 : test 3.2&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.3.1 : test 3.3.1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.3.2 : test 3.3.1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.4 : test 3.4&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.5 : test 3.5&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.6.1 : test 3.6.1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.6.2 : test 3.6.2&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.6.3.1.1 : test 3.6.3.1.1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.6.3.1.2 : test 3.6.3.1.2&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.7 : test 3.7&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 3.8 : test 3.8&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 1 : test 1&#13;
+*** Script [ATOS_FAULTSERVICE_TRIGGER]: prefix: 2 : test 2&#13;
+&#13;
+&#13;
+</description>
+        <name>GSLogCounter</name>
+        <script><![CDATA[var GSLogCounter = Class.create();
+GSLogCounter.prototype = Object.extendsObject(GSLog,  {
+    initialize: function(param, script, prefix, useCounter, useTimeStamp) {
+		if (param && typeof(param) != 'object') {
+			// compatibility 
+			var property = param;
+			
+			param = {};
+			param.property = property;
+			param.script = script;
+			param.prefix = prefix;
+			param.useCounter = useCounter;
+			param.useTimeStamp = useTimeStamp;
+		} 
+		else {
+			if (param.script === undefined && param.source !== undefined) {
+				param.script = param.source;
+			}
+		}
+
+		this.GSLogCounter_prefix = param.prefix || '';
+		this.GSLogCounter_useCounter = param.useCounter;
+		this.GSLogCounter_counter = [0];
+		this.GSLogCounter_counterLevel = 0;
+		this.GSLogCounter_useTimeStamp = param.useTimeStamp;
+		
+		GSLog.prototype.initialize.call(this, param.property, param.script);
+		this._levelOrder["GSLogCounter.debug"] = "8";
+	},
+		
+	_get_counter_string: function() {
+		this.GSLogCounter_counter[this.GSLogCounter_counterLevel]++;
+		return this.GSLogCounter_counter.slice(0, this.GSLogCounter_counterLevel + 1).join('.');
+	},
+	
+	addCounterLevel: function() {
+		this.GSLogCounter_counter[this.GSLogCounter_counterLevel]++;
+		this.GSLogCounter_counterLevel++;
+		this.GSLogCounter_counter[this.GSLogCounter_counterLevel] = 0;
+	},
+	
+	removeCounterLevel: function() {
+		if (this.GSLogCounter_counter[this.GSLogCounter_counterLevel] == 0) {
+			this.GSLogCounter_counter[this.GSLogCounter_counterLevel-1]--;
+		}
+		this.GSLogCounter_counterLevel--;
+	},
+
+	setCounterLevel: function(level) {
+		level--;
+		if (this.GSLogCounter_counterLevel == level) {
+			return;
+		}
+		else if (this.GSLogCounter_counterLevel < level) {
+			this.GSLogCounter_counter[this.GSLogCounter_counterLevel]++;
+			for (var i = this.GSLogCounter_counterLevel + 1; i < level; i++) {
+				this.GSLogCounter_counter[i] = 1;
+			}
+			this.GSLogCounter_counter[level] =  0;
+		}
+		else {
+			var hasLogs = this.GSLogCounter_counter[this.GSLogCounter_counterLevel] != 0;
+			for (var j = level + 1; j <= this.GSLogCounter_counterLevel - 1; j++) {
+				if (this.GSLogCounter_counter[j] != 1) {
+					hasLogs = true;
+					break;
+				}
+			}
+			if (!hasLogs) {
+				this.GSLogCounter_counter[level]--;
+			}
+		}
+
+        this.GSLogCounter_counterLevel = level;
+	},	
+	
+	resetCounter: function() {
+		this.GSLogCounter_counter = [0];
+		this.GSLogCounter_counterLevel = 0;
+	},	
+	
+	_getValue: function(message) {
+		return "" + // avoid warnings on editor
+			(this.GSLogCounter_prefix? this.GSLogCounter_prefix + ': ' : '') +
+			(this.GSLogCounter_useTimeStamp ? new Date().getTime().toString() + ': ' : '') +
+			(this.GSLogCounter_useCounter? this._get_counter_string() + ' : ' : '') +				
+			message
+		;
+	},	
+	
+	log: function(level, message) {
+		if (level == "debug") {
+			level = "GSLogCounter.debug"; // avoids "[DEBUG]" which would make prefix and timestamp hard to use
+		}
+		GSLog.prototype.log.call(this, level, this._getValue(message));
+	},
+	
+	includeTimestamp: function() {
+		this.GSLogCounter_useTimeStamp = true;
+	},	
+	
+    type: 'GSLogCounter'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-11-02 06:48:11</sys_created_on>
+        <sys_id>5e9534e41b5c681051d64261cd4bcbac</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>GSLogCounter</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_5e9534e41b5c681051d64261cd4bcbac</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-11-02 06:48:11</sys_updated_on>
+    </sys_script_include>
+</record_update>

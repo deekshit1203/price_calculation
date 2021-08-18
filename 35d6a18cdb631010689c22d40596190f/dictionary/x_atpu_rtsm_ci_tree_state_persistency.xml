@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="hasLabels=true,no_audit_delete=true" label="CI Tree State Persistency" max_length="40" name="x_atpu_rtsm_ci_tree_state_persistency" type="collection">
+        <element label="CI" mandatory="true" max_length="32" name="alert_ci" reference="cmdb_ci" type="reference" unique="true"/>
+        <element active="false" default="0" label="Alert Count Intrinsic Primary" max_length="40" name="alert_count_intrinsic_primary" type="integer"/>
+        <element active="false" default="0" label="Alert Count Intrinsic Secondary" max_length="40" name="alert_count_intrinsic_secondary" type="integer"/>
+        <element active="false" default="0" label="Alert Count Intrinsic Total" max_length="40" name="alert_count_intrinsic_total" type="integer"/>
+        <element active="false" default="0" label="Alert Count Potential Primary" max_length="40" name="alert_count_potential_primary" type="integer"/>
+        <element active="false" default="0" label="Alert Count Potential Secondary" max_length="40" name="alert_count_potential_secondary" type="string"/>
+        <element active="false" default="0" label="Alert Count Potential Total" max_length="40" name="alert_count_potential_total" type="integer"/>
+        <element active="false" default="0" label="Alert Group Count Intrinsic" max_length="40" name="alert_group_count_intrinsic" type="integer"/>
+        <element active="false" default="0" label="Alert Group Count Potential" max_length="40" name="alert_group_count_potential" type="integer"/>
+        <element active="false" attributes="edge_encryption_enabled=true" default="0" label="AVAILABILITY Event Count" max_length="40" name="avail_event_count" read_only="true" type="integer"/>
+        <element active="false" attributes="edge_encryption_enabled=true" default="0" label="Event Count" max_length="40" name="event_count" read_only="true" type="integer"/>
+        <element attributes="edge_encryption_enabled=true" default="100.0" hint="Health of the CI with cluster connection strengths" label="Cluster Health" max_length="40" name="health" type="float"/>
+        <element attributes="edge_encryption_enabled=true" label="Is Cluster" max_length="40" name="is_cluster" type="boolean"/>
+        <element label="Is  Connector" max_length="40" name="is_connector_ci" type="boolean"/>
+        <element attributes="edge_encryption_enabled=true" label="Is Root CI" max_length="40" name="is_root_ci" read_only="true" type="boolean"/>
+        <element attributes="edge_encryption_enabled=true" default="true" label="Is Valid" max_length="40" name="is_valid" read_only="true" type="boolean"/>
+        <element attributes="goto_use_starts_with=true" label="Message" max_length="2048" name="message" read_only="true" type="string"/>
+        <element label="Message Intrinsic" max_length="2048" name="message_intrinsic" type="string"/>
+        <element label="Message Potential" max_length="2048" name="message_potential" type="string"/>
+        <element active="false" attributes="edge_encryption_enabled=true" default="0" label="PERFORMANCE Event Count" max_length="40" name="perf_event_count" read_only="true" type="integer"/>
+        <element active="false" attributes="edge_encryption_enabled=true" default="0" label="Root Cause Event Count" max_length="40" name="root_cause_event_count" read_only="true" type="integer"/>
+        <element choice="1" default="0" label="State Intrinsic" max_length="40" name="state_intrinsic" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Critical" sequence="1" value="1"/>
+                <element inactive_on_update="false" label="Major" sequence="2" value="2"/>
+                <element inactive_on_update="false" label="Minor" sequence="3" value="3"/>
+                <element inactive_on_update="false" label="Warning" sequence="4" value="4"/>
+                <element inactive_on_update="false" label="OK" sequence="5" value="5"/>
+                <element inactive_on_update="false" label="Clear" sequence="6" value="0"/>
+            </choice>
+        </element>
+        <element choice="1" default="0" label="State Potential" max_length="40" name="state_potential" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Critical" sequence="1" value="1"/>
+                <element inactive_on_update="false" label="Major" sequence="2" value="2"/>
+                <element inactive_on_update="false" label="Minor" sequence="3" value="3"/>
+                <element inactive_on_update="false" label="Warning" sequence="4" value="4"/>
+                <element inactive_on_update="false" label="OK" sequence="5" value="5"/>
+                <element inactive_on_update="false" label="Clear" sequence="6" value="0"/>
+            </choice>
+        </element>
+        <element active="false" attributes="edge_encryption_enabled=true" default="0" label="Symptom Event Count" max_length="40" name="symptom_event_count" read_only="true" type="integer"/>
+        <element attributes="edge_encryption_enabled=true" label="Domain" max_length="32" name="sys_domain" read_only="true" type="domain_id"/>
+        <element attributes="case_sensitive=true,edge_encryption_enabled=true" label="Domain Path" max_length="255" name="sys_domain_path" type="domain_path"/>
+        <element attributes="edge_encryption_enabled=true" choice="1" choice_field="u_ci_event_state" default="0" label="Upstream State" max_length="40" name="upstream_state" type="integer">
+            <choice>
+                <element inactive_on_update="false" label="Critical" sequence="1" value="1"/>
+                <element inactive_on_update="false" label="Major" sequence="2" value="2"/>
+                <element inactive_on_update="false" label="Minor" sequence="3" value="3"/>
+                <element inactive_on_update="false" label="Warning" sequence="4" value="4"/>
+                <element inactive_on_update="false" label="OK" sequence="5" value="5"/>
+                <element inactive_on_update="false" label="Clear" sequence="6" value="0"/>
+            </choice>
+        </element>
+        <index name="index">
+            <element name="alert_ci"/>
+        </index>
+        <index name="index2">
+            <element name="sys_domain"/>
+        </index>
+        <index name="index3">
+            <element name="sys_domain_path"/>
+        </index>
+    </element>
+</database>

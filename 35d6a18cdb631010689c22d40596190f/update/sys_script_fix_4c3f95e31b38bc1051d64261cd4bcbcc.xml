@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <active>false</active>
+        <before>false</before>
+        <description/>
+        <flush_cache>false</flush_cache>
+        <name>RTSM: HN test Subgraph</name>
+        <record_for_rollback>false</record_for_rollback>
+        <run_once>true</run_once>
+        <script><![CDATA[var idFinance = '3b5ef395dbddf700a0c18a3a48961980'; // BP Finance
+var id_18_5 = 'a05e7f55dbddf700a0c18a3a489619fc'; // 18.5 Process accounts payable and expense reimbursements , childs 18.5.1 und 18.5.2
+var id_18_5_1 = '285e7f55dbddf700a0c18a3a489619fd'; // 18.5.1 Process accounts payable, chids AMEA
+var id_18_5_2 = 'ac5e7f55dbddf700a0c18a3a489619fe'; // 18.5.2 Process expense reimbursements
+
+var idAmeaPayments = 'df5cf6159f030200fe2ab0aec32e70a2'; // AMEA E-Payments
+var idSPApplication = 'f35c36959f030200fe2ab0aec32e7087';   // SharePoint-APPLICATION / Mapped Application Service / 
+var idSPExelServices = '306c36959f030200fe2ab0aec32e70b7';  // Excel Calculation Services
+
+var hng_test = '80497b75dbf6d850f0d905e3ca96191e'; //AP0 AU Invoice Billing 1150_BILL_CRE1#DECOM20200826113000
+var hng_test2 = "db4dc3959f030200fe2ab0aec32e7015"; //North America E-Payments
+var hng_test3 = "285e7f55dbddf700a0c18a3a489619fd"; //18.5.1 Process accounts payable
+var hng_test4 = "285e7f55dbddf700a0c18a3a489619fd"; //18.5.1 Process accounts payable
+
+// RTSM TEST
+/*
+(new SubGraphAPI()).getSubGraph( id_18_5_1, 'AR RTSM 1', 'outbound', 0, 100, 100, 100);
+(new SubGraphAPI()).getSubGraph( id_18_5_1, 'AR RTSM 2', 'inbound', 0, 100, 100, 100);
+(new SubGraphAPI()).getSubGraph( id_18_5_1, 'AR RTSM 3', 'any', 0, 100, 400, 100);
+(new SubGraphAPI()).getSubGraph( idFinance, 'AR RTSM 4', 'any', 0, 100, 400, 100);
+*/
+
+var test_connector = {   "vertices": [ {     "idSpace": "atosglobal",     "manager": "BRIDGE or ITOM",     "name": "server-41-vm",     "id": "91e8bbf43710200044e0bfc8bcbe5daa",     "state": {   "intrinsicState": 3,   "upStreamState": 2,   "source": "em_impact_status or x_atpu_rtsm_ci_tree_state_persistency",   "id": "91e8bbf43710200044e0bfc8bcbe5daa",   "potentialState": 2     },     "modelLayer": "Business",     "clazz": "cmdb_ci_server",     "props": {} }, {     "idSpace": "atosglobal",     "manager": "BRIDGE or ITOM",     "name": "server-41-vm",     "id": "91e8bbf43710200044e0bfc8bcbe5daa",     "state": {   "intrinsicState": 3,   "upStreamState": 2,   "source": "em_impact_status or x_atpu_rtsm_ci_tree_state_persistency",   "id": "91e8bbf43710200044e0bfc8bcbe5daa",   "potentialState": 2     },     "modelLayer": "Business",     "clazz": "cmdb_ci_server",     "props": {} }   ],   "count": { "maxDepthOutbound": 7, "maxDepthInbound": 8, "vertices": 100, "edges": 200   },   "reqProps": { "maxDepth": 4, "idSpace": "atosglobal", "limit": 1000, "maxSeverity": 3, "timeout": 1000, "ctxObjId": "91e8bbf43710200044e0bfc8bcbe5daa", "direction": "inbound"   }};
+//gs.info('HN test2: ' + JSON.stringify(test_connector.vertices[0].manager));
+
+// ITOM TEST
+//ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout
+//(new SubGraphAPI()).getSubGraph(idSPApplication, 'HN ITOM 1', 'inbound', 0, 100, 30, 100);
+//var connectors = (new SubGraphAPI()).getConnectors(idSPApplication, 'HN ITOM 2', 'outbound', 0, 100, 30, 100);
+var sg_result = (new SubGraphAPI()).getSubGraph("df5cf6159f030200fe2ab0aec32e70a2", 'HN', 'outbound', 0);
+//(new SubGraphAPI()).getSubGraph(idSPApplication, 'HN ITOM 3', 'any', 0, 100, 30, 100);
+//gs.info('HN test: ' + JSON.stringify(sg_result));
+
+//new CMDBCIRelation().getParentCIRelationSG(hng_test3); // Array of CIRelation Objects]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>hoa.nguyen</sys_created_by>
+        <sys_created_on>2021-06-23 10:13:49</sys_created_on>
+        <sys_id>4c3f95e31b38bc1051d64261cd4bcbcc</sys_id>
+        <sys_mod_count>69</sys_mod_count>
+        <sys_name>RTSM: HN test Subgraph</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_fix_4c3f95e31b38bc1051d64261cd4bcbcc</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-08-11 06:52:27</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>

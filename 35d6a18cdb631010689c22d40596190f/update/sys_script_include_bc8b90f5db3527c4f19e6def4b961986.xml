@@ -1,0 +1,472 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CSCalcHelper</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Implementation of CI Tree SP - CS Always Calculator &amp; Maintain CI Tree SP
+- Helper script for CI Tree SP</description>
+        <name>CSCalcHelper</name>
+        <script><![CDATA[/**SNDOC
+	@name CSCalcHelper
+	@description 
+	@domain Impact Calculation
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CSCalcHelper = Class.create();
+CSCalcHelper.prototype = {
+
+	bottomCIs: {},
+	bottomCIToCheck: undefined,
+
+	/**SNDOC
+		@name initialize
+		@description 
+		*/
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CSCalcHelper");	
+	},
+	/**SNDOC
+		@name updateDetails
+		@description 
+		@param {GlideRecord(ci_tree_sp)} [parentCI] -  CI Tree SP object of Parent CI
+		@returns {GlideRecord(ci_tree_sp)} CI Tree SP object of Parent CI
+		*/
+	updateDetails: function (parentCI /* CI Tree SP object of Parent CI */) {
+		
+		//TODO: adopt to alert counts
+		this.log.debug("Start updateDetails: " + parentCI.alert_ci);
+		var alert_count = 0;
+		var rootCause_count = 0;
+		var symptom_count = 0;
+		var alert_count_potential = 0;
+		var perf_count = 0;
+
+
+		this.log.info("updateDetails: Message is: " + parentCI.message + ", CI is: " + parentCI.alert_ci);
+
+		parentCI.root_cause_alert_count = rootCause_count;
+		parentCI.symptom_alert_count = symptom_count;
+		parentCI.alert_count_potential = alert_count_potential;
+		parentCI.perf_alert_count = perf_count;
+		parentCI.alert_count = alert_count;
+		parentCI.health = null;
+
+		this.log.info("updateDetails: Root Cause Alert count: " + rootCause_count + ", Symptom Alert Count: " + symptom_count + ", Availability Alert Count: " + alert_count_potential + ", Performance Alert Count: " + perf_count + ", Overall Alert Count: " + alert_count + ", CI is: " + parentCI.alert_ci);
+
+		this.log.debug("End updateDetails: " + parentCI.alert_ci);
+		return parentCI;
+	},
+	/**SNDOC
+		@name 
+		@description 
+		@param {Array} [childCIIds] -  Array of Child CI sys_ids to check for the worst Status
+		*/
+	calcWorstChildCIStatus: function (childCIIds /* Array of Child CI sys_ids to check for the worst Status */ ) {
+		this.log.debug("Start calcWorstChildCIStatus");
+		var result = 5;
+		var ga = new GlideAggregate("x_atpu_rtsm_ci_tree_state_persistency");
+		ga.addQuery("alert_ci", "IN", childCIIds.join(","));
+		ga.addAggregate('COUNT', 'upstream_state');
+		ga.orderByDesc("upstream_state");
+		ga.query();
+		if (ga.next()) {
+			result = ga.upstream_state + 0;
+		}
+		this.log.info("calcWorstChildCIStatus: return the state : " + result);
+		this.log.debug("End calcWorstChildCIStatus");
+		return result;
+	},
+	/**SNDOC
+		@name calcMostBottomCIs
+		@description  Calculation of most bottom CIs containing Alerts for a given Customer
+		@param {String} [customerSysID] - sys_id of a Customer to calculate most bottom CI's for
+		@param {*} [result] -  
+		@return Object containting the sys_id of all calculated most bottom CI's
+		*/
+	calcMostBottomCIs: function (customerSysID, result) {
+
+		this.log.debug("[calcMostBottomCIs] Start for Customer: " + customerSysID);
+
+		this.result = result;
+
+		//Reset Bottom CIs object
+		this.bottomCIs = {};
+
+
+		//TODO: rework service_alert
+		//Query CI's in scope of check via active Alerts on CI's
+		var gaAlerts = new GlideAggregate('em_alert');
+		//State is Open, Work in Progress, Root Cause alert Detected
+		//gaAlerts.addQuery('state', 'IN', '1,2,50');
+		gaAlerts.addQuery('state', 'IN', 'Open,Reopen,Flapping');
+		gaAlerts.addQuery('active', true);
+		gaAlerts.addQuery('company', customerSysID);
+		gaAlerts.addNotNullQuery('cmdb_ci');
+		//Each CI is returned only once
+		gaAlerts.groupBy('cmdb_ci');
+		gaAlerts.orderBy('company.name');
+		gaAlerts.query();
+		this.log.debug('[calcMostBottomCIs] [gaAlerts]= ' + RTSMLog.logQuery(gaAlerts));
+
+		//Next Alert exists?
+		while (gaAlerts.next()) {
+			var rtsmCIConfig = new SPConfig();
+			var ret = rtsmCIConfig.isCIRTSMEnabled(gaAlerts.getValue("cmdb_ci").toString());
+			if (ret == true) {
+				this.bottomCIs[gaAlerts.getValue("cmdb_ci").toString()] = '';
+			}
+		}
+
+		try {
+			//Next CI from Hashmap available?
+			for (var key in this.bottomCIs) {
+				if (this.bottomCIs.hasOwnProperty(key)) {
+					this.bottomCIToCheck = key;
+					this.checkMostBottomCILayer(key);
+				}
+			}
+
+			this.result.setOk();
+		} catch (err) {
+			this.result.setError(err.message);
+			this.log.error("[calcMostBottomCIs] Error Message - " + err.message + ", customer sys_id: " + customerSysID);
+		}
+
+		this.log.logObject(this.bottomCIs, "[calcMostBottomCIs] bottomCIs");
+		this.log.debug("[calcMostBottomCIs] Return for Customer: " + customerSysID);
+	
+		return this.bottomCIs;
+	},
+	/**SNDOC
+		@name checkMostBottomCILayer
+		@description  Recursive function to retrieve and find the most bottom CIs from the underpinning CIs.
+		@param {String} [ciSysID] - sys_id of CI that should be checked for being a most bottom CI
+		@param {CILoopDetector} [loopDetector] - 
+		
+		@return true --> Continue recursive investigation on CI's
+		         false --> Stop recursive investigations on CI's
+		*/
+	checkMostBottomCILayer: function (ciSysID, loopDetector) {
+
+		var ciHelper = new CIHelper();
+		var childRelations;
+		var childRelation;
+		var childSysId;
+		var tempCI;
+		var ret;
+		var childCIsForRecursion = {};
+
+		this.log.debug("Start checkMostBottomCILayer for CI sys_id: " + ciSysID);
+
+		//For first call of Recursion, instantiate CI Loop Detector object
+		if (!loopDetector) {
+			loopDetector = new CILoopDetector();
+		}
+
+		//push CI sys_id in the object as a key to count Calculated CIs
+		this.result.addValidLeaveObject(ciSysID, '');
+		this.log.info("checkMostBottomCILayer: CI sys_id is - " + ciSysID);
+
+		childRelations = new CMDBCIRelation().getChildCIRelations(ciSysID); // Array of CIRelation Objects
+
+		//Next Child CI Relation
+		for (var i = 0; i < childRelations.length; i++) {
+
+			childRelation = childRelations[i];
+			childSysId = childRelation.child.sys_id;
+
+			//Increase valid leaves
+			this.result.increaseValidLeave();
+
+			//CI Loop Detected - check next CI from list of Child CI Relations
+			ret = loopDetector.checkCIRelationForLoop(childRelation);
+			if (ret.loop) {
+				continue;
+			}
+
+			//Child CI available in the Hashmap && CHild CI != current Hashmap CI
+			if (this.bottomCIs.hasOwnProperty(childSysId) && childSysId != this.bottomCIToCheck) {
+				//Remove CI from the Hashmap
+				delete this.bottomCIs[this.bottomCIToCheck];
+
+				this.log.info("Return checkMostBottomCILayer for CI sys_id: " + ciSysID + ", deleted bottomCIToCheck " + this.bottomCIToCheck + " from Hashmap");
+				return false;
+			}
+
+			//Push processed Child CI sys_id in the array for recursion
+			childCIsForRecursion[childSysId] = '';
+		}
+
+		//Next CI available
+		for (var key in childCIsForRecursion) {
+			if (childCIsForRecursion.hasOwnProperty(key)) {
+				var loopDetectorChild = new CILoopDetector();
+				loopDetectorChild.copyRelationsFrom(loopDetector);
+
+				if (this.checkMostBottomCILayer(key, loopDetectorChild) == false) {
+					this.log.debug("Return checkMostBottomCILayer for CI sys_id: " + ciSysID + ", return false");
+					return false;
+				}
+			}
+		}
+
+		this.log.debug("Return checkMostBottomCILayer for CI sys_id: " + ciSysID + ", return true");
+		return true;
+	},
+	/**SNDOC
+		@name resetCI
+		@description  Reset the CI from the CI Tree SP. It deletes all the impacting alerts for the CI and update CI with default values.
+		@param {Object} [ciTreeSP] - CI Tree SP record (object)
+		*/
+	resetCI: function (ciTreeSP) {
+		this.log.info("resetCI: (Before) CI [ " + ciTreeSP.alert_ci.name + " ] ,  CI Tree SP state= " + ciTreeSP.state_potential.getDisplayValue() + ", Upstream state= " + ciTreeSP.upstream_state.getDisplayValue());
+
+		//set CI Tree SP state to OK
+		ciTreeSP.state_potential = 0;
+		//set Upstream state of CI to OK
+		ciTreeSP.upstream_state = 0;
+
+
+		this.log.info("resetCI: (After) CI [ " + ciTreeSP.alert_ci.name + " ] ,  CI Tree SP state= " + ciTreeSP.state_potential.getDisplayValue() + ", Upstream state= " + ciTreeSP.upstream_state.getDisplayValue());
+
+		this.updateDetails(ciTreeSP);
+	},
+	/**SNDOC
+		@name 
+		@description upstream state is the worse value between intrinsic and potential state
+		@param {GlideRecord(CITreeSP)} [grCITreeSP] -  
+		*/
+	calcUpstreamState: function (grCITreeSP) {
+		var logPrefix = grCITreeSP.alert_ci.getDisplayValue() + "(" + grCITreeSP.alert_ci + "): ";
+		this.log.debug(logPrefix + "Start calcUpstreamState: " + grCITreeSP.alert_ci);
+
+		var ciTreeSPStatus = 0;
+
+		ciTreeSPStatus = parseInt(grCITreeSP.state_potential);
+		this.log.info(logPrefix + "calcUpstreamState: CI Tree SP status is : " + ciTreeSPStatus);
+
+		/*
+		//OLD ATF2
+		if (ciTreeSPStatus == RTSMConst.CITREE_STATE_OUTAGE) {
+			grCITreeSP.upstream_state = RTSMConst.CITREE_STATE_OUTAGE;
+		} else {
+			if (ciTreeSPStatus == RTSMConst.CITREE_STATE_DEGRADATION) {
+				grCITreeSP.upstream_state = RTSMConst.CITREE_STATE_DEGRADATION;
+			} else if (ciTreeSPStatus == RTSMConst.CITREE_STATE_AT_RISK) {
+				grCITreeSP.upstream_state = RTSMConst.CITREE_STATE_AT_RISK;
+				return;
+			} else {
+				grCITreeSP.upstream_state = RTSMConst.CITREE_STATE_OK;
+			}
+		}
+		*/
+		
+		var monitored_state = parseInt(grCITreeSP.getValue('state_intrinsic'));
+		//we take in account monitored state only if it's other than Clear 0
+		if (monitored_state) {
+			//we keep the worse value
+			ciTreeSPStatus = ((monitored_state < ciTreeSPStatus) ? monitored_state : ciTreeSPStatus);
+		}
+		grCITreeSP.setValue('upstream_state', ciTreeSPStatus);
+		
+		this.log.info(logPrefix + "calcUpstreamState: calculated upstream state is: " + grCITreeSP.upstream_state);
+		this.log.debug(logPrefix + "End calcUpstreamState: ");
+	},
+	
+
+	type: 'CSCalcHelper'
+};
+
+	/**SNDOC
+	@name 
+	@description 
+	@param {String} [ciSysId] -  
+	@param {Boolean} [isvalid] -  
+	*/
+	CSCalcHelper.updateIsValidFlag = function  (ciSysId, isvalid) {
+			var ciTreeSP = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+			ciTreeSP.addQuery('alert_ci', '=', ciSysId);
+			ciTreeSP.query();
+	
+			if (!ciTreeSP.next()) {
+				return false;
+			} else {
+				// Set "Is Valid" to false for deleting the impacting alerts
+				if (ciTreeSP.is_valid != false) {
+					ciTreeSP.is_valid = false;
+				}
+				var res = ciTreeSP.update();
+				return true;
+			}
+		};
+
+	/**SNDOC
+	@name _updateChangedFields
+	@description Updates fields in a GlideRecord form object if its value has changed. FieldNames must exist on both sides.
+	@author: hendrik.mueller@atos.net
+	@param  {GlideRecord} [gr] - the record to update
+	@param  {Object} [object] - The object having properties of fieldNames
+	@param  {Array(String)} [fieldNames] - The names of the fields to update.
+	@private
+	@returns true if at least one field has been updated
+	*/
+	CSCalcHelper._updateChangedFields = function (gr, object, fieldNames) {
+		var valueChanged = false;
+		for (var i in fieldNames) {
+			var fieldName = fieldNames[i];
+			if (gr[fieldName] != object[fieldName]) {
+				gr[fieldName] = object[fieldName];
+				valueChanged = true;
+			}
+			return valueChanged;
+		}
+	};
+	
+	/**SNDOC
+	@name calculateDomainData
+	@description calculate and persist the domain dependent fields 'isConnector','model_layer', 'rtsm_domain', 'manager'
+	@author: hendrik.mueller@atos.net
+	@param  {GlideRecord(ci_treesp)} [spEntry] - the record in the CI SP table
+	@returns {{GlideRecord(ci_treesp)} } the record in the CI SP table
+	*/
+	CSCalcHelper.calculateDomainData = function (spEntry) {
+		_log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CSCalcHelper");
+		var irr = new IRR();	
+
+		if (!spEntry) {
+			_log.error('[calculateDomainData] SP entry missing!');
+			return false;
+		}
+
+		var ci = new CIHelper().getCI('sys_id=' + spEntry.alert_ci);
+		var clazz = ci['class'];
+		var grModelLayer = irr.getLayerOfClass(clazz);
+
+		spEntry.setValue('rtsm_domain', grModelLayer['rtsm_domain']);
+		spEntry.setValue('model_layer', grModelLayer['sys_id']);
+		spEntry.setValue('is_connector', irr.isConnectorNode(clazz));
+		spEntry.setValue('manager', grModelLayer.rtsm_domain.manager);
+
+		_log.debug('[calculateDomainData] ciTreeSP sys_id: ' + spEntry.sys_id + 'domainData:' + JSON.stringify(domainData));
+		return spEntry;
+	};
+
+/**SNDOC
+		@name calculateIntrinsicState
+		@description calculate intrinsic CI status and the related alert (alert) statistics
+		@param {string} [ci] - sys_id of ci
+		@param {string} [requestType] - "ci_add" (no other value has been seen)
+		@returns {Boolean} true if success
+		*/
+	CSCalcHelper.calculateIntrinsicState = function (ciTreeSP, requestType) {
+		_log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CSCalcHelper");
+		var ciSys_id = ciTreeSP.alert_ci;
+		_log.debug("Start calculateIntrinsicState: " + ciSys_id + ", Request Type: " + requestType);
+
+		if (!ciSys_id) {
+			_log.error("calculateIntrinsicState: ci is Null: " + ciSys_id);
+			return false;
+		}
+		
+		var state_label = 'OK';
+		var alert_count_intrinsic_updated = false;
+
+		var ci_data = new CIHelper().getCI('sys_id=' + ciTreeSP.alert_ci);
+		//Retrive CI details from sys_id
+
+		//do not check the customer if the request type is "ci_add"
+		if (requestType != 'ci_add') {
+			//Check if customer is Active or Not
+			var spConfig = new SPConfig();
+			var isCustomerActive = spConfig.validateCustomer(ci_data.company);
+
+			if (isCustomerActive === false) {
+				_log.info("calculateIntrinsicState: Customer is Not Active: " + ci_data.company.name);
+				return false;
+			}
+		}
+
+		//calculate intrinsic alert counts
+		var count_open_alert_query = "cmdb_ci.sys_id=" + ciSys_id + "^stateINOpen,Reopen,Flapping^severity!=0";
+
+		_log.info("calculateIntrinsicState: count_alert_query: " + count_open_alert_query + ", CI: " + ci_data.name);
+
+		var alert_count_intrinsic_total = 0;
+		var alert_count_intrinsic = 0;
+		var alert_count_intrinsic_primary = 0;
+		var alert_count_intrinsic_secondary = 0;
+		var alert_group_count_intrinsic = 0;
+		var severity_intrinsic = RTSMConst.Severity_OK;
+
+		var count_alerts = new GlideAggregate('em_alert');
+
+		//affected CI = CI(sys_id); 
+		/** Correlation Group is choice(null, primary or secondary) */
+		count_alerts.addEncodedQuery(count_open_alert_query);
+		count_alerts.addAggregate('COUNT', 'correlation_group');
+		count_alerts.addAggregate('MIN', 'severity');
+		count_alerts.orderBy('correlation_group');
+		count_alerts.query();
+
+		while (count_alerts.next()) {
+			var alert_count_temp = count_alerts.getAggregate('COUNT', 'correlation_group');
+			var correlationGroup = parseInt(count_alerts.getValue('correlation_group'), 10);
+			alert_count_temp = parseInt(alert_count_temp);
+			switch (correlationGroup) {
+				case RTSMConst.RoleInGroup_None:
+					alert_count_intrinsic += alert_count_temp;
+					break;
+				case RTSMConst.RoleInGroup_Primary:
+					alert_count_intrinsic_primary += alert_count_temp;
+					break;
+				case RTSMConst.RoleInGroup_Secondary:
+					alert_count_intrinsic_secondary += alert_count_temp;
+					break;
+				default:
+					_log.error('[calculateIntrinsicState] - unknown correlationGroup: ' + correlationGroup);
+					alert_count_intrinsic_total += alert_count_temp;
+			}
+			
+			var severity_temp = count_alerts.getAggregate('MIN', 'severity');
+			severity_intrinsic = Math.min(severity_intrinsic, severity_temp);
+		}
+
+		//update state and alert statistics fields only if current value is diffrent than the previous
+		if (ciTreeSP.state_intrinsic != severity_intrinsic) {
+			ciTreeSP.state_intrinsic = severity_intrinsic.toString();
+		}
+		
+		var alert_counters_intrinsic = ["alert_count_intrinsic", "alert_count_intrinsic_primary", "alert_count_intrinsic_secondary", "alert_count_intrinsic_total"];
+		alert_count_intrinsic_updated = CSCalcHelper._updateChangedFields(ciTreeSP, this, alert_counters_intrinsic);
+
+		//hng todo: check missing var
+		//ciTreeSP.message = "The CI instrinsic state: " + ciTreeSP.state_intrinsic.getDisplayValue() + ", Total Alerts: " + alert_count_intrinsic + ", #Primary: " + alert_count_intrinsic_primary + " (Dupl: " + dup_alert_count_intrinsic + "), Performance: " + perf_alert_count + " (Dupl: " + dup_perf_alert_count + ")";
+		ciTreeSP.message = "The CI instrinsic state: " + ciTreeSP.state_intrinsic.getDisplayValue() + ", Total Alerts: " + alert_count_intrinsic + ", #Primary: " + alert_count_intrinsic_primary;
+
+		//_log.info("calculateIntrinsicState: The CI is in state: " + state_label + ", Total Primary Alerts: " + alert_count_intrinsic + ", Availability: " + alert_count_intrinsic + " (Dupl: " + dup_alert_count_intrinsic + "), Performance: " + perf_alert_count + " (Dupl: " + dup_perf_alert_count + "), CI: " + ci_data.name);
+		_log.info("calculateIntrinsicState: " + ciTreeSP.message);
+		_log.debug("End calculateIntrinsicState: " + ci_data.name + ", Request Type: " + requestType);
+		
+		//also update upstream state
+		var csCalcHelper = new CSCalcHelper();
+		csCalcHelper.calcUpstreamState(ciTreeSP);
+		
+		return ciTreeSP;
+	};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>bc8b90f5db3527c4f19e6def4b961986</sys_id>
+        <sys_mod_count>227</sys_mod_count>
+        <sys_name>CSCalcHelper</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_bc8b90f5db3527c4f19e6def4b961986</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:39:58</sys_updated_on>
+    </sys_script_include>
+</record_update>

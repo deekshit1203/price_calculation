@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CIRelationManagerChangeDetector</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include handles the Change Detection of changes between two CI Relation Managers. Typically this will be a Manager holding the CI Relations from the previous import and a Manager holding the CI Relations from the current import</description>
+        <name>CIRelationManagerChangeDetector</name>
+        <script><![CDATA[/**SNDOC
+	@name CIRelationManagerChangeDetector
+	@description 
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CIRelationManagerChangeDetector = Class.create();
+
+CIRelationManagerChangeDetector.TYPE_ACTIONABLE = 1;
+CIRelationManagerChangeDetector.TYPE_NON_ACTIONABLE = 2;
+
+CIRelationManagerChangeDetector.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelationManagerChangeDetector");	
+
+		this.log.debug("[CIRelationManagerChangeDetector] initialize");
+
+		//Hash holds all deleted CI Relation objects
+		this.deletedCIRelations = Object.create(null);
+
+		//Hash holds all added CI Relation objects
+		this.addedCIRelations = Object.create(null);
+
+		//Hash holds all CIRelation objects with a new percentage outage value
+		this.modifiedPercentCIRelations = Object.create(null);
+
+		//Hash holds all CIRelation objects with a new Company on the Parent CI
+		this.modifiedCompanyCIRelations = Object.create(null);
+
+		//Hash holds all CIRelation objects with a new connection strength value
+		this.modifiedStrengthCIRelations = Object.create(null);
+
+		//Hash containing the CI Relations in scope of change detection from the new data import
+		this.newRelations = Object.create(null);
+
+		//Hash containing the CI Relations in scope of change detection from the currently used CI Model and with that CI Relation Manager
+		this.currentRelations = Object.create(null);
+		this.log.debug("[CIRelationManagerChangeDetector] end");
+	},
+
+	/**SNDOC
+		@name detectChanges
+		@description Checks deleted, added, modified relations and fills this.currentRelations and this.newRelations.
+		@author ATF2
+		@param  {Object} [currentCiRelMan] - 
+		@param  {Object} [newCiRelMan] - 
+		*/
+	//TODO: Not really clear
+	detectChanges: function (currentCiRelMan, newCiRelMan) {
+		this.log.debug("[detectChanges CIRelationManagerChangeDetector] Start");
+
+		this.currentRelations = currentCiRelMan.getRelationsAsHash(null, CIRelationManagerChangeDetector.TYPE_ACTIONABLE);
+		this.newRelations = newCiRelMan.getRelationsAsHash(null, CIRelationManagerChangeDetector.TYPE_ACTIONABLE);
+
+		this.log.info("[detectChanges] Current CI Relations : " + JSON.stringify(this.currentRelations));
+		this.log.info("[detectChanges] New CI Relations : " + JSON.stringify(this.newRelations));
+
+		this.checkDeletedCIRelations();
+		this.checkAddedCIRelations();
+		this.checkModifications();
+
+		//Clean member variable
+		this.currentRelations = {};
+		this.newRelations = {};
+
+		this.currentRelations = currentCiRelMan.getRelationsAsHash(["cluster"], CIRelationManagerChangeDetector.TYPE_ACTIONABLE);
+		this.newRelations = newCiRelMan.getRelationsAsHash(["cluster"], CIRelationManagerChangeDetector.TYPE_ACTIONABLE);
+		this.checkModifiedClusterPercentage();
+
+		this.log.debug("[detectChanges CIRelationManagerChangeDetector] End");
+	},
+
+	/**SNDOC
+		@name checkDeletedCIRelations
+		@description Checks for any deleted CI Relation from the newly imported data. Calls addDeletedCIRelation on every relation that is in this.currentRelations but not in this.newRelations.
+		@sideeffect addDeletedCIRelation
+		@author ATF2
+		*/
+	checkDeletedCIRelations: function () {
+		this.log.debug("[checkDeletedCIRelations] Start");
+		var currentRelationHashKey = Object.keys(this.currentRelations);
+
+		for (var i = 0; i < currentRelationHashKey.length; i++) {
+			//Next CI Relation from Current
+			if (currentRelationHashKey[i] in this.newRelations) {
+				//CI Relation exists in both Current and New
+				this.log.info("[checkDeletedCIRelations] CI Relation exists in both Current and New");
+			} else {
+				//CI Relation does not exist in New anymore
+				this.addDeletedCIRelation(this.currentRelations[currentRelationHashKey[i]]);
+			}
+		}
+		this.log.debug("[checkDeletedCIRelations] End");
+	},
+
+	/**SNDOC
+		@name checkAddedCIRelations
+		@description  Checks for any added CI Relation from the newly imported data. Calls addAddedCIRelation on every relation that is in this.currentRelations and in this.newRelations.
+		@sideeffect addAddedCIRelation
+		@author ATF2
+		@param  {String} [] - 
+		@returns {String} 
+		*/
+	checkAddedCIRelations: function () {
+		this.log.debug("[checkAddedCIRelations] Start");
+		var newRelationHashKey = Object.keys(this.newRelations);
+
+		for (var i = 0; i < newRelationHashKey.length; i++) {
+			//Next CI Relation from New
+			if (newRelationHashKey[i] in this.currentRelations) {
+				//CI Relation exists in both New and Current
+				this.log.info("[checkAddedCIRelations] CI Relation exists in both New and Current");
+			} else {
+				//CI Relation does not exist in Current-> newly added
+				this.addAddedCIRelation(this.newRelations[newRelationHashKey[i]]);
+			}
+		}
+		this.log.debug("[checkAddedCIRelations] End");
+	},
+
+	/**SNDOC
+		@name checkModifications
+		@description  Checks for any modified Connection Strength value or a modified value of the Company of the Parent CI of the CI Relation
+		@sideeffect  addModifiedStrengthCIRelation
+		@sideeffect  addModifiedCompany
+		@author ATF2
+		*/
+	checkModifications: function () {
+		this.log.debug("[checkModifications] Start");
+
+		var newRelationHashKey = Object.keys(this.newRelations);
+		for (var i = 0; i < newRelationHashKey.length; i++) {
+			//Next CI Relation from New
+			if (newRelationHashKey[i] in this.currentRelations) {
+				//CI Relation exists in both New and Current
+				var newCiRelObj = this.newRelations[newRelationHashKey[i]];
+				var currentCiRelObj = this.currentRelations[newRelationHashKey[i]];
+
+				this.log.info("[checkModifications] Company [" + newCiRelObj.parent.company + "] of Parent CI from New . Company [" + currentCiRelObj.parent.company + "] of Parent CI from Current");
+
+				if (newCiRelObj.connection_strength !== currentCiRelObj.connection_strength) {
+					//Connection Strength from New is different from Connection Strength from Current
+					this.log.info("[checkModifications] Connection Strength [" + newCiRelObj.connection_strength + "] from New is different from Connection Strength [" + currentCiRelObj.connection_strength + "] from Current");
+
+					this.addModifiedStrengthCIRelation(this.newRelations[newRelationHashKey[i]]);
+				}
+				if (newCiRelObj.parent.company !== currentCiRelObj.parent.company) {
+					//Company of Parent CI from New is different from Company of Parent CI from Current
+					this.log.info("[checkModifications] Company [" + newCiRelObj.parent.company + "] of Parent CI from New is different from Company [" + currentCiRelObj.parent.company + "] of Parent CI from Current");
+
+					this.addModifiedCompany(this.newRelations[newRelationHashKey[i]]);
+				}
+			}
+		}
+		this.log.debug("[checkModifications] End");
+	},
+
+	/**SNDOC
+		@name checkModifiedClusterPercentage
+		@description  Checks for any CI Relation with Connection Strength "Cluster" and a modified value of the Percent Outage
+		@sideeffect  addModifiedPercentageCIRelation
+		@author ATF2
+
+		*/
+	checkModifiedClusterPercentage: function () {
+		this.log.debug("[checkModifiedClusterPercentage] Start");
+
+		var currentRelationHashKey = Object.keys(this.currentRelations);
+		for (var i = 0; i < currentRelationHashKey.length; i++) {
+			//Next CI Relation from Current
+			if (currentRelationHashKey[i] in this.newRelations) {
+				//CI Relation exists in both Current and New
+				this.log.info("[checkModifiedClusterPercentage] CI Relation exists in both New and Current");
+
+				var currentCiRelObj = this.currentRelations[currentRelationHashKey[i]];
+				var newCiRelObj = this.newRelations[currentRelationHashKey[i]];
+				if (currentCiRelObj.percent_outage !== newCiRelObj.percent_outage) {
+					//Percent Outage from Current is different from Percent Outage from New
+					this.log.info("[checkModifiedClusterPercentage] Percent Outage from Current is different from Percent Outage from New");
+
+					this.addModifiedPercentageCIRelation(this.newRelations[currentRelationHashKey[i]]);
+				}
+			}
+		}
+		this.log.debug("[checkModifiedClusterPercentage] End");
+	},
+
+	/**SNDOC
+		@name addDeletedCIRelation
+		@description If Parent CI or Child CI does not exists in 'cmdb_ci', //Add ciRelObj to member "deletedCIRelations"
+		@sideeffects deletedCIRelations
+		@author ATF2
+		@param  {Object} [ciRelObj] - CI Relation object to be checked.
+		*/
+	addDeletedCIRelation: function (ciRelObj) {
+		this.log.debug("[addDeletedCIRelation] Start");
+
+		// Parent CI or Child CI does not exists in 'cmdb_ci' ?
+		if (!ciRelObj.parent.sys_id) {
+			ciRelObj.parent.sys_id = '';
+		}
+
+		if (!ciRelObj.child.sys_id) {
+			ciRelObj.child.sys_id = '';
+		}
+
+		var ciRelHashKey = ciRelObj.parent.sys_id + "-" + ciRelObj.child.sys_id;
+		//Add Param1 to member "deletedCIRelations"
+		this.deletedCIRelations[ciRelHashKey] = ciRelObj;
+		this.log.debug("[addDeletedCIRelation] End");
+	},
+
+	/**SNDOC
+		@name addAddedCIRelation
+		@description 
+		@author ATF2
+		@param  {Object} [ciRelObj] - 
+		@sideeffect  addedCIRelations
+		@returns {String} 
+		*/
+	addAddedCIRelation: function (ciRelObj) {
+		this.log.debug("[addAddedCIRelation] Start");
+
+		var ciRelHashKey = ciRelObj.parent.sys_id + "-" + ciRelObj.child.sys_id;
+		//Add Param1 to member "addedCIRelations"
+		this.addedCIRelations[ciRelHashKey] = ciRelObj;
+		this.log.debug("[addAddedCIRelation] End");
+	},
+
+	/**SNDOC
+		@name addModifiedPercentageCIRelation
+		@description 
+		@author ATF2
+		@param  {Object} [ciRelObj] - 
+		@sideeffect  modifiedPercentCIRelations
+		*/
+	addModifiedPercentageCIRelation: function (ciRelObj) {
+		this.log.debug("[addModifiedPercentageCIRelation] Start");
+
+		var ciRelHashKey = ciRelObj.parent.sys_id + "-" + ciRelObj.child.sys_id;
+		//Add Param1 to member "modifiedPercentCIRelations"
+		this.modifiedPercentCIRelations[ciRelHashKey] = ciRelObj;
+		this.log.debug("[addModifiedPercentageCIRelation] End");
+	},
+
+	/**SNDOC
+		@name addModifiedCompany
+		@description 
+		@author ATF2
+		@param  {Object} [ciRelObj] - 
+		@sideeffect  modifiedCompanyCIRelations
+		*/
+	addModifiedCompany: function (ciRelObj) {
+		this.log.debug("[addModifiedCompany] Start");
+
+		var ciRelHashKey = ciRelObj.parent.sys_id + "-" + ciRelObj.child.sys_id;
+		//Add Param1 to member "modifiedCompanyCIRelations"
+		this.modifiedCompanyCIRelations[ciRelHashKey] = ciRelObj;
+		this.log.debug("[addModifiedCompany] End");
+	},
+
+	/**SNDOC
+		@name addModifiedStrengthCIRelation
+		@description 
+		@author ATF2
+		@param  {Object} [ciRelObj] - 
+		@sideeffect  modifiedStrengthCIRelations
+		*/
+	addModifiedStrengthCIRelation: function (ciRelObj) {
+		this.log.debug("[addModifiedStrengthCIRelation] Start");
+
+		var ciRelHashKey = ciRelObj.parent.sys_id + "-" + ciRelObj.child.sys_id;
+		//Add Param1 to member "deletedCIRelations"
+		this.modifiedStrengthCIRelations[ciRelHashKey] = ciRelObj;
+		this.log.debug("[addModifiedStrengthCIRelation] End");
+	},
+
+	/**SNDOC
+		@name getDeletedCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} deletedCIRelations
+		*/
+	getDeletedCIRelations: function () {
+		return this.deletedCIRelations;
+	},
+
+	/**SNDOC
+		@name getAddedCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} addedCIRelations
+		*/
+	getAddedCIRelations: function () {
+		return this.addedCIRelations;
+	},
+
+	/**SNDOC
+		@name getModifiedPercentCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} modifiedPercentCIRelations
+		*/
+	getModifiedPercentCIRelations: function () {
+		return this.modifiedPercentCIRelations;
+	},
+
+	/**SNDOC
+		@name getModifiedCompanyCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} modifiedCompanyCIRelations
+		*/
+	getModifiedCompanyCIRelations: function () {
+		return this.modifiedCompanyCIRelations;
+	},
+
+	/**SNDOC
+		@name getModifiedStrengthCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} modifiedStrengthCIRelations
+		*/
+	getModifiedStrengthCIRelations: function () {
+		return this.modifiedStrengthCIRelations;
+	},
+
+	type: 'CIRelationManagerChangeDetector'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>3efdbb9edb06c4d424d2bb1a689619cf</sys_id>
+        <sys_mod_count>52</sys_mod_count>
+        <sys_name>CIRelationManagerChangeDetector</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_3efdbb9edb06c4d424d2bb1a689619cf</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-13 14:16:37</sys_updated_on>
+    </sys_script_include>
+</record_update>

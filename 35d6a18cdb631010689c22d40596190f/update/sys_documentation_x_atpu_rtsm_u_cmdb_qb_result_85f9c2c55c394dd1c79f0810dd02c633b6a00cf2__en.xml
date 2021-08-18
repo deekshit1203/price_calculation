@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="" label="AR:  PHHC  -SubGraph-Query Results" language="en" table="x_atpu_rtsm_u_cmdb_qb_result_85f9c2c55c394dd1c79f0810dd02c633b6a00cf2">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element/>
+            <help/>
+            <hint/>
+            <label>AR:  PHHC  -SubGraph-Query Results</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_u_cmdb_qb_result_85f9c2c55c394dd1c79f0810dd02c633b6a00cf2</name>
+            <plural>AR:  PHHC  -SubGraph-Query Results</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-08-10 08:00:02</sys_created_on>
+            <sys_id>5d8259a91b427010e5f386a3604bcb5e</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>AR:  PHHC  -SubGraph-Query Results</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_u_cmdb_qb_result_85f9c2c55c394dd1c79f0810dd02c633b6a00cf2__en</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-08-10 08:00:02</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

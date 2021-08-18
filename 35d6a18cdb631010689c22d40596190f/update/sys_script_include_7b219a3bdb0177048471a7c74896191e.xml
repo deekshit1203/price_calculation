@@ -1,0 +1,404 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPQueryRegistry</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates the CI Tree SP CMDB Query Registry</description>
+        <name>CITreeSPQueryRegistry</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPQueryRegistry
+	@description This Class encapsulates the CI Tree SP CMDB Query Registry
+	@domain CMDB Query Register
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPQueryRegistry = Class.create();
+CITreeSPQueryRegistry.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_DM_CMDB_QUERY_REG, "CITreeSPQueryRegistry");
+		// GlideRecord of table x_atpu_rtsm_citreesp_cmdb_query_registry
+		this.gr = null;
+	},
+
+	/**SNDOC
+		@name getGenericDomain
+		@description Retrieve the domain to be used for Generic entries
+		@author ATF2
+		@returns {Object} Domain
+		*/
+	getGenericDomain: function () {
+		this.log.info("Start getGenericDomain Info");
+
+		//Retrieve the domain to be used for Generic entries
+		var domainAttributeValue = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_cmdbqueryregistry_genericdomainname));		
+		this.log.info("getGenericDomain: Default domain name for Generic entires : " + domainAttributeValue);
+
+		var result = null;
+		var domain = '';
+		var domainName = '';
+
+		// Get sysID of default domain from Domain table
+		var rec = new GlideRecord('domain');
+		if (rec.isValid()) {
+			rec.addQuery('name', domainAttributeValue);
+			rec.query();
+			if (rec.next()) {
+				result = true;
+				domain = rec.sys_id;
+				domainName = domainAttributeValue;
+				this.log.info("getGenericDomain: SysID for generic domain : " + rec.sys_id);
+			} else {
+				result = false;
+				domain = null;
+				domainName = domainAttributeValue;
+			}
+		} else {
+			result = false;
+			domain = null;
+			domainName = domainAttributeValue;
+		}
+
+		this.log.info("getGenericDomain: result [ " + result + " ] , domain [ " + domain + " ] , domainName [ " + domainName);
+		this.log.debug("End getGenericDomain");
+
+		//Return the Object
+		return {
+			'result': result,
+			'domain': domain,
+			'domainName': domainName
+		};
+	},
+
+	/**SNDOC
+		@name getRegistryEntryCount
+		@description Get sum of generic + customer registry count
+		@author ATF2
+		@returns {Integer} 
+		*/
+	getRegistryEntryCount: function () {
+		this.log.debug("Start [getRegistryEntryCount]");
+
+		var countOfGenericEntries = this.getGenericRegistryEntryCount();
+		var countOfCustomerEntries = this.getCustomerRegistryEntryCount();
+		var totalCount = parseInt(countOfGenericEntries) + parseInt(countOfCustomerEntries);
+
+		this.log.debug("End [getRegistryEntryCount] + Total Count of Registry Entries = "  + totalCount);
+
+		//Return the total count of configured active Registry entries
+		return totalCount;
+	},
+
+	/**SNDOC
+		@name getGenericRegistryEntryCount
+		@description Get number generic registry count
+		@author ATF2
+		@returns {Integer} the count of active entries in the Query Registry for Generic Customers
+		*/
+	getGenericRegistryEntryCount: function () {
+		this.log.debug("Start getGenericRegistryEntryCount");
+
+		var genericEntry = new GlideAggregate('x_atpu_rtsm_citreesp_cmdb_query_registry');
+		genericEntry.addQuery('active', 'true');
+		genericEntry.addQuery('type', 'Generic');
+		genericEntry.addAggregate('COUNT');
+		genericEntry.query();
+
+		var genericEntryCount = 0;
+		if (genericEntry.next()) {
+
+			genericEntryCount = genericEntry.getAggregate('COUNT');
+
+		}
+
+		this.log.info("getGenericRegistryEntryCount: Count of Generic Registry Entries = " + genericEntryCount);
+		this.log.debug("End getGenericRegistryEntryCount");
+
+		//Return the count of active entries in the Query Registry for Generic Customers
+		return genericEntryCount;
+	},
+
+	/**SNDOC
+		@name getCustomerRegistryEntryCount
+		@description Get number customer registry count
+		@author ATF2
+		@returns {Integer} the count of active entries in the Query Registry for Customer Specific
+		*/
+	getCustomerRegistryEntryCount: function () {
+		this.log.debug("Start [getCustomerRegistryEntryCount]");
+
+		var customerEntry = new GlideAggregate('x_atpu_rtsm_citreesp_cmdb_query_registry');
+		customerEntry.addQuery('active', 'true');
+		customerEntry.addQuery('type', 'Customer Specific');
+		customerEntry.addAggregate('COUNT');
+		customerEntry.query();
+
+		var customerEntryCount = 0;
+		if (customerEntry.next()) {
+			customerEntryCount = customerEntry.getAggregate('COUNT');
+		}
+
+		this.log.debug("[getCustomerRegistryEntryCount] Count of Customer Specific Registry Entries = " + customerEntryCount);
+
+		//Return the count of active entries in the Query Registry for Customer Specific
+		return customerEntryCount;
+	},
+
+	/**SNDOC
+		@name getNextGenericRegistryEntry
+		@description Get next generic GlideRecord of type CITreeSPQueryRegistry
+		@author ATF2
+		@returns {Object} (Flag moreData, GlideRecord('CITreeSPQueryRegistry'))
+		*/
+	getNextGenericRegistryEntry: function () {
+		this.log.debug("Start getNextGenericRegistryEntry");
+
+		var moreData;
+		var data;
+
+		if (this.gr == null) {
+
+			this.log.info("getNextGenericRegistryEntry: gr is null, Call method : initGenericRegistryEntries");
+			this.initGenericRegistryEntries();
+		}
+
+		//Check if Next Entry on member gr is available
+		if (this.gr.next()) {
+
+			//Fill the data from GlideRecord into the data of return object
+			data = this.gr;
+
+			//hasNext() on GlideRecord is true?
+			if (this.gr.hasNext()) {
+				moreData = true;
+			} else {
+				moreData = false;
+			}
+			this.log.info("getNextGenericRegistryEntry: next record processed , moreData: " + moreData + ", data: Number=" + data.number);
+		} else {
+
+			//Fill null into "data", false into "moreData" of return object
+			data = null;
+			moreData = false;
+			this.log.info("getNextGenericRegistryEntry: next record not available , moreData: " + moreData);
+		}
+
+		this.log.debug("End getNextGenericRegistryEntry");
+
+		//Return the Object
+		return {
+			'moreData': moreData,
+			'data': data
+		};
+	},
+
+
+	/**SNDOC
+		@name initGenericRegistryEntries
+		@description Get Generic Registry Entries
+		@author ATF2
+		@returns {GlideRecord('CITreeSPQueryRegistry')} Generic Registry Entries
+		*/
+	initGenericRegistryEntries: function () {
+		this.log.debug("Start initGenericRegistryEntries");
+
+		var genericEntryGR = new GlideRecord('x_atpu_rtsm_citreesp_cmdb_query_registry');
+		genericEntryGR.addQuery('active', 'true');
+		genericEntryGR.addQuery('type', 'Generic');
+		genericEntryGR.query();
+
+		this.gr = genericEntryGR;
+
+		this.log.debug("End initGenericRegistryEntries");
+	},
+
+
+	/**SNDOC
+		@name getNextCustomerRegistryEntry
+		@description Get next Customer GlideRecord of type CITreeSPQueryRegistry
+		@author ATF2
+		@returns {Object} (Flag moreData, GlideRecord('CITreeSPQueryRegistry'))
+		*/
+	getNextCustomerRegistryEntry: function () {
+		this.log.debug("Start getNextCustomerRegistryEntry");
+
+		var moreData;
+		var data;
+
+		if (this.gr == null) {
+
+			this.log.info("getNextCustomerRegistryEntry: gr is null, Call method : initCustomerRegistryEntries");
+			this.initCustomerRegistryEntries();
+		}
+
+		//Check if Next Entry on member gr is available
+		if (this.gr.next()) {
+
+			//Fill the data from GlideRecord into the data of return object
+			data = this.gr;
+
+			//hasNext() on GlideRecord is true?
+			if (this.gr.hasNext()) {
+				moreData = true;
+			} else {
+				moreData = false;
+			}
+			this.log.info("getNextCustomerRegistryEntry: next record processed , moreData: " + moreData + ", data: Customer= " + data.customer.name + " , Number=" + data.number);
+
+		} else {
+
+			//Fill null into "data", false into "moreData" of return object
+			data = null;
+			moreData = false;
+			this.log.info("getNextCustomerRegistryEntry: next record not available , moreData: " + moreData);
+		}
+
+		this.log.debug("End getNextCustomerRegistryEntry");
+
+		//Return the Object	      
+		return {
+			'moreData': moreData,
+			'data': data
+		};
+	},
+
+
+	/**SNDOC
+		@name initCustomerRegistryEntries
+		@description Get Customer Registry Entries
+		@author ATF2
+		@returns {GlideRecord('CITreeSPQueryRegistry')} Customer Registry Entries
+		*/
+	initCustomerRegistryEntries: function () {
+
+		this.log.debug("Start initCustomerRegistryEntries");
+
+		var customerEntryGR = new GlideRecord('x_atpu_rtsm_citreesp_cmdb_query_registry');
+		customerEntryGR.addQuery('active', 'true');
+		customerEntryGR.addQuery('type', 'Customer Specific');
+		customerEntryGR.orderBy('customer');
+		customerEntryGR.query();
+
+		this.gr = customerEntryGR;
+
+		this.log.debug("End initCustomerRegistryEntries");
+
+	},
+
+
+	/**SNDOC
+		@name getCrossCustomers
+		@description Get cross customers of current CITreeSPQueryRegistry object
+		@author ATF2 
+		@returns {Array} Array with all cross customers
+		*/
+	getCrossCustomers: function () {
+		this.log.debug("Start getCrossCustomers");
+
+		var crossCustomerList = [];
+		var returnArray = [];
+
+		//Check if Cross-Customers is not empty
+		if (this.gr.getValue("cross_customers")) {
+
+			//Get the list of cross-customers
+			crossCustomerList = this.gr.cross_customers.toString().split(",");
+
+			this.log.info("getCrossCustomers: No. of Cross-Customers=" + crossCustomerList.length + ", Cross-Customer name is:" + this.gr.getDisplayValue("cross_customers") + " configured for Customer =" + this.gr.customer.name + ", Number=" + this.gr.number);
+
+			for (var i = 0; i < crossCustomerList.length; i++) {
+
+				if (crossCustomerList[i] !== '') {
+					returnArray.push(crossCustomerList[i]);
+				}
+			}
+		}
+
+		this.log.debug("End getCrossCustomers");
+		//Return the sysIds of Customers that are configured as Cross-Customers  or empty array when there are no Cross-Customers configured
+		return returnArray;
+	},
+
+
+
+	/**SNDOC
+		@name getQueryBuilderDomainRefQual
+		@description
+		@author ATF2
+		@param  {String} [] - 
+		@returns {String} 
+		*/
+	//TODO Method has no reference in application
+	getQueryBuilderDomainRefQual: function (current) {
+		this.log.debug("Start getQueryBuilderDomainRefQual");
+
+		// Get current object
+		var queryRegistryType = current.type;
+
+		if (queryRegistryType == "Generic") {
+			// Get the Domains of enabled Customers
+
+			var customerArray = [];
+			var custDomainSysIds = [];
+
+			var ciTreeSP = new SPConfig();
+			customerArray = ciTreeSP.getCITreeSPEnabledCustomers();
+
+			for (var i = 0; i < customerArray.length; i++) {
+				// Get Domain of all Customers		
+				if (customerArray[i].modelName == "RTSM" && customerArray[i].name !== '') {
+
+					this.log.info("getQueryBuilderDomainRefQual: Type is Generic. Get Domain for Customer=" + customerArray[i].name);
+
+					var record = new GlideRecord('core_company');
+					record.get(customerArray[i].sysID);
+
+					//Push the Domain SysIDs into an Array
+					custDomainSysIds.push(record.sys_domain);
+				}
+			}
+
+			// Get default Domain "ATOS Agents"
+			var retObj = this.getGenericDomain();
+			// Push the default Domain into return Array
+			custDomainSysIds.push(retObj.domain);
+
+			this.log.info("getQueryBuilderDomainRefQual: Type is Generic. Return SysID for default domain and domain of all CI Tree ECIM Customers : " + custDomainSysIds.toString());
+
+			this.log.debug("Start getQueryBuilderDomainRefQual");
+
+			//Return SysID of CI Tree ECIM customers
+			return 'sys_domainIN' + custDomainSysIds.toString();
+		} else if (queryRegistryType == "Customer Specific") {
+			// Get Domain of the selected Customer
+
+			var rec = new GlideRecord('core_company');
+			rec.get(current.customer);
+
+			this.log.info("getQueryBuilderDomainRefQual: Type is Customer Specific. Get SysID for customer domain : " + rec.sys_domain.toString());
+			this.log.debug("Start getQueryBuilderDomainRefQual");
+
+			//Return SysId of Customer Domain
+			return 'sys_domainIN' + rec.sys_domain.toString();
+		}
+	},
+
+
+
+	type: 'CITreeSPQueryRegistry'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>7b219a3bdb0177048471a7c74896191e</sys_id>
+        <sys_mod_count>123</sys_mod_count>
+        <sys_name>CITreeSPQueryRegistry</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_7b219a3bdb0177048471a7c74896191e</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-29 11:29:06</sys_updated_on>
+    </sys_script_include>
+</record_update>

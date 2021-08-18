@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_ui_form_sections form_id="c25fc0f0db002450689c22d40596194e" sys_domain="global" table="x_atpu_rtsm_citreesp_queue" version="3">
+        <sys_ui_form_section action="INSERT_OR_UPDATE">
+            <position>0</position>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2020-10-21 12:23:15</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>0a5fc0f0db002450689c22d405961951</sys_id>
+            <sys_mod_count>1</sys_mod_count>
+            <sys_overrides/>
+            <sys_ui_form display_value="x_atpu_rtsm_citreesp_queue" name="x_atpu_rtsm_citreesp_queue" sys_domain="global" view="Default view">c25fc0f0db002450689c22d40596194e</sys_ui_form>
+            <sys_ui_section caption="NULL" display_value="" name="x_atpu_rtsm_citreesp_queue" sys_domain="global" view="Default view">0a5084bd1b23605051d64261cd4bcbc0</sys_ui_section>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:30:52</sys_updated_on>
+        </sys_ui_form_section>
+        <sys_ui_form action="INSERT_OR_UPDATE">
+            <name>x_atpu_rtsm_citreesp_queue</name>
+            <roles/>
+            <sys_class_name>sys_ui_form</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2020-10-21 12:23:14</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>c25fc0f0db002450689c22d40596194e</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>x_atpu_rtsm_citreesp_queue</sys_name>
+            <sys_overrides/>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_ui_form_sections_c25fc0f0db002450689c22d40596194e</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2020-10-21 12:23:14</sys_updated_on>
+            <sys_user/>
+            <view display_value="Default view" name="NULL">Default view</view>
+            <view_name/>
+        </sys_ui_form>
+    </sys_ui_form_sections>
+</record_update>

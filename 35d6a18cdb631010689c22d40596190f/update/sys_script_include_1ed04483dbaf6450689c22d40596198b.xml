@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SubGraphAPI</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>SubGraph API:  API</description>
+        <name>SubGraphAPI</name>
+        <script><![CDATA[/**SNDOC
+    @name SubGraphAPI
+    @description API for SubGraph (PN-252)
+    @see https://
+    @domain API
+    @author andreas.reermann@atos.net
+    @version 1.0.0
+    */
+/*
+    PATH PARAMETERS
+    ctxObjId
+    required
+    string
+    Example: 91e8bbf43710200044e0bfc8bcbe5daa
+    ID of the start entity for the subgraph retrieval
+    
+    QUERY PARAMETERS
+    direction	
+    string
+    Default: "inbound"
+    Enum: "inbound" "outbound" "any"
+    Example: direction=inbound
+    the traversal direction.
+       
+    maxSeverity	
+    integer <int32> [ 0 .. 5 ]
+    Default: 5
+    Example: maxSeverity=3
+    the entities in the subgraph must have the maximimum severity as either intrinsic status or potential status.
+    
+    maxDepth	
+    integer <int32>
+    Default: 3
+    Example: maxDepth=4
+    Maximum number of edges from the context object to any target object (Maximum traversal depth). If maxDepth == 0 traverse infinite depth.
+
+   limit	
+    integer <int32>
+    Default: 0
+    Example: limit=1000
+    The maximum number of vertices to return from the search. If limit == 0 return all vertices.
+    
+*/
+var SubGraphAPI = Class.create();
+
+SubGraphAPI.prototype = {
+
+    initialize: function() {
+        this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "API");
+    },
+
+   getSubGraph: function(ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout) {
+        var sGraph = new SubGraph();
+        reqProps = sGraph.graph.reqProps;
+
+        try {
+            if (this._checkParameters(sGraph, ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout)) {
+                sGraph.buildSubGraph(reqProps.ctxObjId);
+            }
+        } catch (sgError) {
+            sGraph.setResult(SubGraphUtil.error["api_exp"], sgError.message);
+        }
+        
+        // this.log.debug('[SubGraphAPI][getSubGraph] sGraph.graph: ' + JSON.stringify(sGraph.graph));
+
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.graph: ' + JSON.stringify(sGraph.graph));
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.graph.result: ' + JSON.stringify(sGraph.graph.result));
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.shared: ' + JSON.stringify(sGraph.shared));
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.shared.verticesFound: ' + JSON.stringify(sGraph.shared.verticesFound));      
+
+        // this.log.debug('[SubGraphAPI][getSubGraph] sGraph.shared.startTime: ' + sGraph.shared.startTime);
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.connectors: ' + JSON.stringify(sGraph.connectors));                  
+
+        // return sGraph;
+        return sGraph.graph;
+    },
+
+      // getDomain(contextObject: string) : object
+    getDomain: function (ctxObjId, idSpace) {
+        this.log.debug('[SubGraphAPI][getDomain] START');  
+        var sGraph = new SubGraph();
+        var result = {
+                domain: '',
+                error: SubGraphUtil.OK   
+            };
+            
+        if (global.JSUtil.nil(ctxObjId)) {
+            sGraph.setResult("missing_param", 'ctxObjId is not set.');
+        } else {
+            if (!SubGraphUtil.getClassOfCI(ctxObjId))
+                sGraph.setResult("unknown_ctx_object", ctxObjId);
+        }  
+
+        if (sGraph.graph.result.code == SubGraphUtil.OK) {
+            result.domain = (new SubGraphUtil()).getDomain(ctxObjId);
+            // return (new SubGraphUtil()).getDomain(ctxObjId);
+        } else {
+            result.error = sGraph.graph.result.code;
+            //return sGraph.graph.result.code;
+        }
+
+        return result;
+
+        // var result = {
+        //     domain: '',
+        //     error: SubGraphUtil.OK   
+        // };
+
+        // try {
+        //     if (this._checkParameters(sGraph, ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout)) {
+        //         if (SubGraphUtil.getClassOfCI(ctxObjId))
+        //             result.domain = (new SubGraphUtil()).getDomain(ctxObjId);
+        //         else
+        //             result.error = SubGraphUtil.error["unknown_ctx_object"];
+        //     }
+        // } catch (sgError) {
+        //    result.error =  SubGraphUtil.error["api_exp"];
+        // }
+        // this.log.debug('[SubGraphAPI][getDomain] END: ' + result.domain);  
+        // this.log.debug('[SubGraphAPI][getDomain] END: ' + result.error);  
+        // this.log.debug('[SubGraphAPI][getDomain] END: ' + JSON.stringify(result));  
+
+        return result;
+    },
+
+    getConnectors: function (ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout) {
+        var sGraph = new SubGraph();
+        reqProps = sGraph.graph.reqProps;
+
+        try {
+            if (this._checkParameters(sGraph, ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout)) {
+                sGraph.buildSubGraph(reqProps.ctxObjId);
+            }
+        } catch (sgError) {
+            sGraph.setResult(SubGraphUtil.error["api_exp"], sgError.message);
+        }
+        
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.connectors: ' + JSON.stringify(sGraph.connectors));  
+        this.log.debug('[SubGraphAPI][getSubGraph] sGraph.graph.result: ' + JSON.stringify(sGraph.graph.result));
+
+        return sGraph.connectors;
+    },
+
+    _checkParameters: function(sGraph, ctxObjId, idSpace, direction, maxSeverity, maxDepth, limit, timeout) {
+        var reqProps = sGraph.graph.reqProps;
+        var shared = sGraph.shared;
+
+        if (global.JSUtil.nil(ctxObjId)) {
+            sGraph.setResult("missing_param", 'ctxObjId is not set.');
+        } else {
+            reqProps.ctxObjId = ctxObjId;
+            if (!SubGraphUtil.getClassOfCI(ctxObjId))
+                sGraph.setResult("unknown_ctx_object", ctxObjId);
+        }  
+
+        if (sGraph.graph.result.code == SubGraphUtil.OK) {
+            if (global.JSUtil.nil(idSpace))
+                sGraph.setResult("missing_param", 'idSpace is not set.');
+            else
+                reqProps.idSpace = idSpace;
+        }
+
+        if (sGraph.graph.result.code == SubGraphUtil.OK) {
+            if (global.JSUtil.nil(direction)) {
+                reqProps.direction = SubGraphUtil.direction.inbound;
+            } else {
+                if (SubGraphUtil.direction[direction])
+                    reqProps.direction = direction;
+                else 
+                    sGraph.setResult("invalid_param", 'Invalid direction');
+            }
+        }
+
+        //TODO defaults aus properties
+        var rtsmUtil = new RTSMUtil();
+        var propMaxSeverity = rtsmUtil.getProperty(RTSMConst.subgraph_max_severity);
+        var propMaxDepth = rtsmUtil.getProperty(RTSMConst.subgraph_max_depth);
+        var propLimit = rtsmUtil.getProperty(RTSMConst.subgraph_limit);
+        var propTimeout = rtsmUtil.getProperty(RTSMConst.subgraph_timeout);
+
+        this.log.debug('Properties maxSeverity: ' + propMaxSeverity + ', maxDepth : ' + propMaxDepth + ', limit : ' + propLimit + ', timeout : ' + propTimeout);
+
+        reqProps.maxSeverity = (global.JSUtil.nil(maxSeverity) || maxSeverity==0) ? propMaxSeverity : maxSeverity;
+        reqProps.maxDepth = (global.JSUtil.nil(maxDepth) || maxDepth==0) ? propMaxDepth : maxDepth;
+        reqProps.limit = (global.JSUtil.nil(limit) || limit==0) ? propLimit : limit;
+        reqProps.timeout = (global.JSUtil.nil(timeout) || timeout==0) ? propTimeout*1000 : timeout*1000;
+
+        this.log.debug('Parameter maxSeverity: ' + reqProps.maxSeverity + ', maxDepth : ' + reqProps.maxDepth + ', limit : ' + reqProps.limit + ', timeout : ' + reqProps.timeout);
+
+        if(sGraph.graph.result.code == SubGraphUtil.OK) {
+            return true; 
+        } else  {
+            this.log.debug('sGraph.graph.result.code : ' + sGraph.graph.result.code );
+        }
+    },
+
+    type: 'SubGraphAPI'
+};
+
+    // ############################################################
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-20 10:46:36</sys_created_on>
+        <sys_id>1ed04483dbaf6450689c22d40596198b</sys_id>
+        <sys_mod_count>117</sys_mod_count>
+        <sys_name>SubGraphAPI</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_1ed04483dbaf6450689c22d40596198b</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-03 05:02:39</sys_updated_on>
+    </sys_script_include>
+</record_update>

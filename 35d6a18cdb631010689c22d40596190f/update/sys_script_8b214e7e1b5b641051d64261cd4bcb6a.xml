@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>false</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>em_alert</collection>
+        <condition/>
+        <description/>
+        <execute_function>false</execute_function>
+        <filter_condition table="em_alert">state=Open^cmdb_ciISNOTEMPTY^EQ<item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/>
+        </filter_condition>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>newAlert4RTSM</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[/**SNDOC
+	@name BR newAlertRTSM
+	@description BR on[em_alert] "after insert' with condition ci is not null and state == open
+	Trigger calculation of Intrinsic state of CI Tree state persistency on receiving a new alert and to trigger the impact tree calculation
+	@see https://
+	@domain Alert Management
+	@author RTSM
+	@version 1.0.0
+	*/
+
+(function executeRule(current, previous /*null when async*/ ) {
+	var log = new RTSMLog(RTSMLog.LOG_DM_IMPACT_CALC, "newAlert4RTSM");
+	// Only for Dev Test
+	var bCalcIntrinsicState = true;
+
+	try {
+		log.debug(">>> Start BR newAlert4RTSM");
+
+		// TODO: add decision if CI is in RTSM Scope or not and dont calculate the tree		
+		if (bCalcIntrinsicState) {
+			// calculate CI Tree state persistency on receiving new Alert.
+			var ciTreeSP = new CITreeSP();
+			ciTreeSP.calculateIntrinsicState(current.cmdb_ci);
+		}
+
+		var operation = RTSMConst.QO.createAlert;
+		var calcCITree = new FunnelFiller();
+		var result = calcCITree.insert(operation, current);
+
+		log.info("newAlert4RTSM: CI Tree SP funnel entry result: "+result);
+		log.debug("<<< End BR newAlert4RTSM");
+		
+	} catch (err) {
+		log.error("Alert Number - " + current.number + ", error - " + err.message);
+		log.debug("Alert Number - " + current.number + ", error - " + err.message);
+		log.debug("Stack:" + err.stack);
+	}
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2021-04-07 15:12:29</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>8b214e7e1b5b641051d64261cd4bcb6a</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>newAlert4RTSM</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_8b214e7e1b5b641051d64261cd4bcb6a</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-12 10:04:08</sys_updated_on>
+        <template/>
+        <when>after</when>
+    </sys_script>
+    <sys_translated_text action="delete_multiple" query="documentkey=8b214e7e1b5b641051d64261cd4bcb6a"/>
+</record_update>

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorFactory</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for creating specific CI Tree SP Processor objects depending on the provided needs.</description>
+        <name>CITreeSPProcessorFactory</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessorFactory
+	@description create a processor for the type of the processing queue entry
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorFactory = Class.create();
+CITreeSPProcessorFactory.prototype = {
+
+		initialize: function () {
+			this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorFactory");
+			this.ops = RTSMConst.QO;
+		},
+		/**SNDOC
+			@name createProcessor
+			@description create a CITreeSPProcessor
+			@param {Object} [queueEntry] -  The type of the queueEntry determines the type of processor to be created
+			@param {Object} [alert] -  used for calc Processor in case of createAlert, updateAlert, resolveAlert, addCI OR recalcCI
+			@param {*} [startTime] -  used for calc Processor in case of createAlert, updateAlert, resolveAlert, addCI OR recalcCI
+			*/
+
+		//DONE: refactor queueEntry.type comparison to named constants instead of int values
+		createProcessor: function (queueEntry, alert, startTime) {
+			this.log.debug("createProcessor: Queue Entry Type : " + queueEntry.type + " Alert is : " + alert + " startTime :  " + startTime);
+			var ciTreeSPProcessor;
+			switch (parseInt(queueEntry.type)) { 
+				case this.ops.recalcCustomer:
+					ciTreeSPProcessor = new CITreeSPProcessorRecalcCustomer();
+					break;
+				case this.ops.recalcCustomerLeftover:
+					ciTreeSPProcessor = new CITreeSPProcessorRecalcCustomerLeftover();
+					break;
+				case this.ops.cmdbFilterCustomer:
+					ciTreeSPProcessor = new CITreeSPProcessorDataFilter();
+					break;
+				case this.ops.cmdbImportCustomers:
+					ciTreeSPProcessor = new CITreeSPProcessorDataImport();
+					break;
+				case this.ops.cmdbChangeDetectionCustomer:
+					ciTreeSPProcessor = new CITreeSPProcessorDataChangeDetection();
+					break;
+				case this.ops.cmdbImportCustomerLeftover:
+					ciTreeSPProcessor = new CITreeSPProcessorImportCustomerLeftover();
+					break;
+				case this.ops.disconnectCIs:
+					ciTreeSPProcessor = new CITreeSPProcessorDisconnectCIs();
+					break;
+				case this.ops.connectCIs:
+					ciTreeSPProcessor = new CITreeSPProcessorConnectCIs();
+					break;
+				case this.ops.createAlert:
+				case this.ops.updateAlert:
+				case this.ops.resolveAlert:
+				case this.ops.recalcCI:
+					ciTreeSPProcessor = new CITreeSPProcessorCalc(alert, startTime);
+					break;
+				case this.ops.updateCIRelation:
+					ciTreeSPProcessor = new CITreeSPProcessorUpdateCIRelation();
+					break;
+				case this.ops.enableCustomerRTSM:
+					ciTreeSPProcessor = new CITreeSPProcessorEnableCustomer();
+					break;
+				case this.ops.disableCustomerRTSM:
+					ciTreeSPProcessor = new CITreeSPProcessorDisableCustomer();
+					break;
+				default:
+					this.log.error("createProcessor: Queue Entry Type Invalid : " + null);
+					return null;
+			}
+		ciTreeSPProcessor.setQueueEntry(queueEntry);
+		return ciTreeSPProcessor;
+	},
+
+	type: 'CITreeSPProcessorFactory'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>9d40fb68db1b7b00da832539489619d7</sys_id>
+        <sys_mod_count>46</sys_mod_count>
+        <sys_name>CITreeSPProcessorFactory</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_9d40fb68db1b7b00da832539489619d7</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-27 14:21:40</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.User</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>User specific details, especially with respect to data visibility</description>
+        <name>User</name>
+        <script><![CDATA[/**SNDOC
+	@name User
+	@description User specific details, especially with respect to data visibility
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var User = Class.create();
+User.prototype = {
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "User");		
+
+		this.error = '';
+		this.companyDomainHash = Object.create(null);
+		this.gr = '';
+	},
+	/**SNDOC
+		@name loadUser
+		@description load the user record from sys_user
+
+		@param {string} [userId] - the user_name in sys_user
+		@returns {Boolean} true if success
+		*/
+	loadUser: function (userId) {
+
+		this.gr = new GlideRecord('sys_user');
+		this.gr.addQuery('user_name', userId);
+		this.gr.query();
+
+		if (this.gr.next()) {
+
+			this.log.trace('loadUser : User record found - ' + true);
+			return true;
+		} else {
+
+			this.error = 'User with User ID ' + userId + ' could not be loaded from the database';
+			return false;
+		}
+	},
+	/**SNDOC
+		@name setupVisibility
+		@description Gives the user visibility to the domains of the companies (customers)
+		@param {Array} [arrayCustomerSysId] - sys_ids of customers of which CI shall be visible for the user 
+		@returns {Boolean} true if success
+		*/
+		// TODO only relavant for domain separated environment
+	setupVisibility: function (arrayCustomerSysId) {
+		var coreCompany = new CoreCompany();
+
+		var gruserVisibility = new GlideRecord('sys_user_visibility');
+		if (gruserVisibility.isValid()) {
+			gruserVisibility.addQuery('user.sys_id', this.gr.sys_id);
+			gruserVisibility.deleteMultiple();
+
+			this.log.info('setupVisibility : Array of Customer sys_ids - ' + arrayCustomerSysId);
+
+			for (var i = 0; i < arrayCustomerSysId.length; i++) {
+
+				var grVisibility = new GlideRecord('sys_user_visibility');
+				grVisibility.user = this.gr.sys_id;
+				grVisibility.inherited = false;
+				grVisibility.reason = 'SEV CI Tree SP CMDB Data Import';
+				this.log.info('setupVisibility : Customer record to be inserted : User sys_id ' + grVisibility.reason + 'Inherited State ' + grVisibility.inherited);
+
+				if (arrayCustomerSysId[i] in this.companyDomainHash) {
+					grVisibility.sys_domain = this.companyDomainHash[arrayCustomerSysId[i]];
+					this.log.info('setupVisibility : Customer Hash  Domain value - ' + grVisibility.sys_domain);
+				} else {
+					var load = coreCompany.load(arrayCustomerSysId[i]);
+					if (!load) {
+						this.error = load.getError();
+						this.log.info('setupVisibility : Load failed ' + this.error);
+						return false;
+					}
+
+					var domain = coreCompany.getDomain();
+					grVisibility.sys_domain = domain.sys_domain;
+					this.log.info('setupVisibility : Customer getDomain value - ' + grVisibility.sys_domain.toString());
+
+					this.companyDomainHash[arrayCustomerSysId[i]] = grVisibility.sys_domain.toString();
+				}
+				grVisibility.insert();
+			}
+		}
+		return true;
+	},
+	/**SNDOC
+		@name getCompany
+		@description The company sys_id of the user
+		@returns {string} The sys_id of the company, null -> if the user record is empty ('')
+		*/
+	getCompany: function () {
+
+		if (!this.gr) {
+			return null;
+		} else {
+			this.log.info('getCompany : Company value - ' + this.gr.company);
+			return this.gr.company;
+		}
+	},
+	/**SNDOC
+		@name getUserSysID
+		@description The sys_id of the user
+		@returns {string} The sys_id of the user, null -> if the user record is empty ('')
+		*/
+	getUserSysID: function () {
+
+		if (!this.gr) {
+			return null;
+		} else {
+			this.log.info('getUserSysID : SysId of User - ' + this.gr.sys_id);
+			return this.gr.sys_id;
+		}
+	},
+
+	/**SNDOC
+		@name getError
+		@description The current error
+		@returns {string} this.error
+		*/
+	getError: function () {
+		return this.error;
+	},
+
+	type: 'User'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>cc574f1edbf0cc148471a7c74896190b</sys_id>
+        <sys_mod_count>36</sys_mod_count>
+        <sys_name>User</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_cc574f1edbf0cc148471a7c74896190b</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 14:22:39</sys_updated_on>
+    </sys_script_include>
+</record_update>

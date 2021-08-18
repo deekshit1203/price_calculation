@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.RTSMJobs</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Contains functions for scheduled Jobs</description>
+        <name>RTSMJobs</name>
+        <script><![CDATA[/**SNDOC
+	@name RTSMJobs
+	@description Contains functions for scheduled Jobs
+	@domain Utilities
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+
+var RTSMJobs = Class.create();
+RTSMJobs.prototype = {	
+	type: 'RTSMJobs'
+};
+
+/**SNDOC
+	@name sj_CITreeSPDataImport
+	@description Regular CMDB Import
+	This Scheduled Job is running regularly to import the updated CI and CI Relations from the OoB CMDB into the Alert CI Model to reflect the changes done on the CMDB to Alert Management. 
+	To achieve the sync, an entry of type cmdbImportCustomers is inserted into the Processing Queue.
+	SJ runs regularly every 24 h
+	@domain Impact Tree Builder
+	@author ATF2
+	@param  {String} [] - 
+	@returns {String} 
+	*/
+//TODO overwork description 			
+RTSMJobs.sj_CITreeSPDataImport = function(){
+	/* Scheduled Job CITreeSPDataImport
+	*/
+	var log = new RTSMLog(RTSMLog.LOG_TYPE_SJ, "CITreeSPDataImport");
+	log.trace("[RTSMJobs.sj_CITreeSPDataImport] Start");
+
+	try { 
+		/*
+			Recalculates the cached class data in Class To Layer and Model layer
+			Necessary in case of release upgrade or defining customer subclasses
+		*/
+		var irr = new IRRManager();
+		irr.populateClasses();
+
+		global.RTSMGlobalScopeUtils.doPostInstallation();
+
+		// Start scheduled cmdbImportCustomers
+		ops =  RTSMConst.QO;
+		var lastEntryProcessed = new CITreeSPProcessingQueue().isLastEntryProcessed(ops.cmdbImportCustomers);
+
+		if(!lastEntryProcessed){
+			log.warn('[CITreeSPDataImport] Last entry of Type cmdbImportCustomers has not been processed yet. Omitting next trigger.');
+		} else {
+			new FunnelFiller().insert(ops.cmdbImportCustomers);
+		}
+	} catch(excep) {
+		log.error('[CITreeSPDataImport] Error Message: ' + excep.message);		
+	} 		
+	log.trace("[RTSMJobs.sj_CITreeSPDataImport] End");		
+};
+
+/**SNDOC
+	@name sj_CITreeSPQueue
+	@description	This scheduled job is used to process records in the CI Tree SP Queue.
+    SJ runs regularly every 5 secs
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/	
+RTSMJobs.sj_CITreeSPQueue = function(){
+	/* Scheduled Job CITreeSPQueue
+	*/	
+	var log = new RTSMLog(RTSMLog.LOG_TYPE_SJ, "CITreeSPQueue");
+	log.trace("[RTSMJobs.sj_CITreeSPQueue] Start");
+
+	var fun = new FunnelQueueExecutor("citreesp_max_processing_count_per_process", "citreesp_max_parallel_processes", "x_atpu_rtsm_citreesp_queue", "x_atpu_rtsm.citreesp_queue_handler");
+	fun.run();
+	log.trace("[RTSMJobs.sj_CITreeSPQueue] End");	
+};
+
+/**SNDOC
+	@name sj_CITreeSPHousekeeping
+	@description The scheduled job called the cleanOrphanLocks function to cleanup any orphaned locks that
+	can cause processing to stop.
+	SJ runs regularly every 1 min
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+RTSMJobs.sj_CITreeSPHousekeeping = function(){
+	var log = new RTSMLog(RTSMLog.LOG_TYPE_SJ, "sj_CITreeSPHousekeeping");
+	log.trace("[RTSMJobs.sj_CITreeSPHousekeeping] Start");	
+	
+	try {
+		var runCleanOrphan;
+		var functionality = ['CITreeSPProcessorCalc', 'CMDBCIRelation', 'CI'];
+	
+		for (var i = 0; i < functionality.length; i++) {
+			//Clean database semaphore for functionality
+			runCleanOrphan = new DatabaseSemaphore().cleanOrphanLocks(functionality[i]);
+		}
+	
+		log.trace("CITreeSPHousekeeping: Orphan records deleted: "+runCleanOrphan);
+	
+	} catch (excep) {
+		log.error("[CITreeSPHousekeeping]: Error Message - "+ excep.message);
+	}
+	log.trace("[RTSMJobs.sj_CITreeSPHousekeeping] End");	
+};
+
+/**SNDOC
+	@name housekeepingDaily
+    @description 
+    	SJ runs regularly every 2 h
+	@domain Impact Calculation
+	@author ATF2SEV
+	@version 1.0.0
+    */
+
+//TODO I think its obsolet! Maybe usefull if we found real housekeeping tasks
+RTSMJobs.sj_housekeepingDaily = function(){	
+	return;
+	
+	// var log = new RTSMLog(RTSMLog.LOG_TYPE_SJ, "housekeepingDaily");
+	// log.trace("[RTSMJobs.sj_housekeepingDaily] Start");	
+
+	// // TODO: Rework CITreeSPHousekeeping
+	// //Deletes CI Tree SP records without CI values
+	// new CITreeSPHousekeeping().deleteCITreeSPRecWithoutCI();
+
+	// // TODO: Rework CITreeSPHousekeeping
+	// //Recalculate the CI Tree SP States and Impacting alerts 
+	// new CITreeSPHousekeeping().initRecalculateCustomers(); 
+
+	// log.trace("[RTSMJobs.sj_housekeepingDaily] End");		
+}
+
+/**SNDOC
+	@name cleanup
+    @description Cleanup several tables aufter retention period
+    	SJ runs daily
+	@domain General
+	@author RTSM
+	@version 1.0.0
+    */
+RTSMJobs.sj_cleanup = function(){	
+	var log = new RTSMLog(RTSMLog.LOG_TYPE_SJ, "Cleanup");
+
+	log.debug('Cleanup Job: Start');
+	
+	var retPeriodShort = (new RTSMUtil()).getProperty(RTSMConst.retention_period_short);
+	if (global.JSUtil.nil(retPeriodShort)) retPeriodShort = 7;
+	var retPeriodLong = (new RTSMUtil()).getProperty(RTSMConst.retention_period_long);
+	if (global.JSUtil.nil(retPeriodLong)) retPeriodLong = 90;
+			
+	var shortDateTime = new GlideDateTime();
+	shortDateTime.addDaysUTC(0 - retPeriodShort);
+	var longDateTime = new GlideDateTime();
+	longDateTime.addDaysUTC(0 - retPeriodLong);
+
+	log.debug("shortDateTime: " + shortDateTime);
+	log.debug("longDateTime: " + longDateTime);
+
+	// x_atpu_rtsm_subgraph_log
+	var grlog = new GlideRecord('x_atpu_rtsm_subgraph_log');
+	grlog.addQuery('sys_created_on', '<=', shortDateTime);
+	grlog.query();
+	log.debug("Cleanup Job: " + RTSMLog.logQuery(grlog));
+	grlog.deleteMultiple();
+	
+	// x_atpu_rtsm_database_semaphore
+	grlog = new GlideRecord('x_atpu_rtsm_database_semaphore');
+	grlog.addQuery('sys_created_on', '<=', shortDateTime);
+	grlog.query();
+	log.debug("Cleanup Job: " + RTSMLog.logQuery(grlog));
+	grlog.deleteMultiple();
+	
+	// x_atpu_rtsm_citreesp_queue
+	grlog = new GlideRecord('x_atpu_rtsm_citreesp_queue');
+	grlog.addQuery('sys_created_on', '<=', longDateTime);
+	grlog.query();
+	log.debug("Cleanup Job: " + RTSMLog.logQuery(grlog));
+	grlog.deleteMultiple();
+	
+	// x_atpu_rtsm_citreesp_queue_data
+	grlog = new GlideRecord('x_atpu_rtsm_citreesp_queue_data');
+	grlog.addQuery('sys_created_on', '<=', longDateTime);
+	grlog.query();
+	log.debug("Cleanup Job: " + RTSMLog.logQuery(grlog));
+	grlog.deleteMultiple();
+	
+	// x_atpu_rtsm_citreesp_cmdb_query_registry_import_results
+	var grlog = new GlideRecord('x_atpu_rtsm_citreesp_cmdb_query_registry_import_results');
+	grlog.addQuery('sys_created_on', '<=', longDateTime);
+	grlog.query();
+	log.debug("Cleanup Job: " + RTSMLog.logQuery(grlog));
+	grlog.deleteMultiple();
+	
+	log.debug('Cleanup Job: End');
+		
+}]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-11-06 07:15:53</sys_created_on>
+        <sys_id>3b626131db182810689c22d405961900</sys_id>
+        <sys_mod_count>48</sys_mod_count>
+        <sys_name>RTSMJobs</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_3b626131db182810689c22d405961900</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:50:43</sys_updated_on>
+    </sys_script_include>
+</record_update>

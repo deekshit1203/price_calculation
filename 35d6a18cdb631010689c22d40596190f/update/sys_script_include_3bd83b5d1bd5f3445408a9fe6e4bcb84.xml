@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorRecalcCustomerLeftover</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Processor for queue type cmdbImportCustomerLeftover</description>
+        <name>CITreeSPProcessorRecalcCustomerLeftover</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessorRecalcCustomerLeftover
+	@description 
+	@domain Impact Calculation
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorRecalcCustomerLeftover = Class.create();
+CITreeSPProcessorRecalcCustomerLeftover.prototype = Object.extendsObject(CITreeSPProcessor, {
+
+	/**SNDOC
+		@name initialize
+		@description 
+		*/
+	initialize: function () {
+		CITreeSPProcessor.prototype.initialize.call(this);
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorRecalcCustomerLeftover");
+	},
+
+	/**SNDOC
+		@name process
+		@description 
+		*/
+	process: function () {
+		var customer = this.queueEntry.getValue("customer");
+		var duration = parseInt(new RTSMUtil().getProperty(RTSMConst.citreesp_semaphore_wait_time));
+
+		//Query CI Tree SP customer entries where state is incorrect
+		var ciTreeRec = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		ciTreeRec.addQuery('alert_ci.company', customer);
+		ciTreeRec.addQuery('is_valid', false);
+		var qc = ciTreeRec.addQuery('state_potential', '!=', RTSMConst.Severity_OK);
+		qc.addOrCondition('upstream_state', '!=', 0);
+		ciTreeRec.query();
+
+		while (ciTreeRec.next()) {
+
+
+			//Database Semaphore lock to stop parallel processing
+			var semaphore = new DatabaseSemaphore(ciTreeRec.alert_ci, ciTreeRec.alert_ci.sys_domain, 'CITreeSPProcessorCalc', duration);
+			semaphore.lock();
+
+			//this.log.info('process: CI ['+ ciTreeRec.alert_ci.getDisplayValue() + '] ,  Is Valid= ' + ciTreeRec.is_valid.getDisplayValue());
+			var ciSysId = ciTreeRec.alert_ci.toString();
+
+			//Reload CI Tree SP entry
+			var ciTreeReload = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+			ciTreeReload.get(ciTreeRec.sys_id);
+
+			// Is Valid == false && (CITree State Not OK || (CITree Upstream State  not OK && CI Mon SP State is OK)) 
+			if (ciTreeReload.is_valid == false &&
+				(ciTreeReload.state_potential != RTSMConst.Severity_OK ||
+					(ciTreeReload.upstream_state != RTSMConst.Severity_OK &&
+					ciTreeReload.state_intrinsic == RTSMConst.Severity_OK))) {
+
+				var reset = new CSCalcHelper().resetCI(ciTreeReload);
+				//Is Valid flag is set to true
+				ciTreeReload.is_valid = true;
+				ciTreeReload.update();
+
+				//Increase count of calculated CI
+				this.result.addValidLeaveObject(ciTreeRec.sys_id, '');
+			}
+
+			semaphore.unlock();
+		}
+
+		this.result.setOk();
+		return true;
+	},
+
+	type: 'CITreeSPProcessorRecalcCustomerLeftover'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>3bd83b5d1bd5f3445408a9fe6e4bcb84</sys_id>
+        <sys_mod_count>95</sys_mod_count>
+        <sys_name>CITreeSPProcessorRecalcCustomerLeftover</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_3bd83b5d1bd5f3445408a9fe6e4bcb84</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:38:55</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorDisableCustomer</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Processor for queue type disableCustomerRTSM</description>
+        <name>CITreeSPProcessorDisableCustomer</name>
+        <script><![CDATA[	/**SNDOC
+	@name CITreeSPProcessorDisableCustomer 
+	@description 
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorDisableCustomer = Class.create();
+CITreeSPProcessorDisableCustomer.prototype = Object.extendsObject(CITreeSPProcessor, {
+	initialize: function() {
+		CITreeSPProcessor.prototype.initialize.call(this);
+		this.qState = RTSMConst.QueueState;	
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPProcessorDisableCustomer");	
+	},
+	/**SNDOC
+	@name process
+	@description 
+	*/
+	process: function() {
+		this.log.debug("[process][CITreeSPProcessorDisableCustomer] Start");
+
+		var importCustomerObj = new CITreeSPImportCustomers();
+
+		try {
+			var custSysId = this.queueEntry.getValue("customer");
+			var resultObj = importCustomerObj.isImportCustomersRunning(this.queueEntry.getValue("sys_created_on"));
+
+			// Is import run finished ?
+			if (resultObj.importRunning === true) {
+				// Due to State = Ready the entry will be reprocessed
+				this.result.setState(this.qState.READY); 
+				this.error = "Scheduled Customers import not finished yet. Disablement is delayed. " + resultObj.customerTargetCount + " Customers to be imported in total, " + resultObj.customerOngoingCount + " Customers are currently imported ";
+				this.result.setErrorMessage(this.error);
+				this.result.validLeaves = resultObj.customerOngoingCount;
+				this.result.deadLeaves = resultObj.customerTargetCount;
+				this.result.uniqueCis = resultObj.customerStartedCount;
+				this.log.debug("End [process]");
+				return;				
+			}
+
+			var ret = importCustomerObj.isEnableDisableCustomerRunning(this.queueEntry.getValue("sys_created_on"), custSysId);
+			if (ret === true) {
+				// Due to State = Ready the entry will be reprocessed
+				this.result.setState(this.qState.READY); 
+				this.error = "Previous Enable customer or Disable customer not finished yet. Disablement is delayed.";
+				this.result.setErrorMessage(this.error);
+				this.result.validLeaves = 0;
+				this.result.deadLeaves = 0;
+				this.result.uniqueCis = 0;
+				this.log.debug("End [process]");
+				return;				
+			}
+
+			importCustomerObj.createManagers([custSysId]);
+
+			// Pass the temporary "importCustomerObj" holding the empty CIRelationManager
+			var dataFilterSuccess = this.triggerDataFilter(importCustomerObj);
+			if (dataFilterSuccess === false) {
+				this.result.setError(this.error);						
+			}
+			else {
+				//triggerDataFilter was successful
+				this.result.setOk();
+			}
+
+			this.result.validLeaves = 1;
+			this.result.deadLeaves = 0;
+			this.result.uniqueCis = 0; 
+		}
+		catch (err) {
+			this.error = err.message + "\n" + err.stack;
+			this.result.setError(this.error);			
+		}
+
+		this.log.debug("[process][CITreeSPProcessorDisableCustomer] End");
+	},
+
+	type: 'CITreeSPProcessorDisableCustomer'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-12-07 11:35:13</sys_created_on>
+        <sys_id>f417ceb3db786c90689c22d4059619be</sys_id>
+        <sys_mod_count>8</sys_mod_count>
+        <sys_name>CITreeSPProcessorDisableCustomer</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_f417ceb3db786c90689c22d4059619be</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:36:03</sys_updated_on>
+    </sys_script_include>
+</record_update>

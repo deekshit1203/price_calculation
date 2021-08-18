@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPHousekeeping</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This is a Script Include to place all CI Tree SP Housekeeping tasks. </description>
+        <name>CITreeSPHousekeeping</name>
+        <script><![CDATA[/**SNDOC
+	@name var CITreeSPHousekeeping
+	@description 
+	@domain Impact Calculation
+	@author ATF2
+	@param  {String} [] - 
+	@returns {String} 
+	*/
+var CITreeSPHousekeeping = Class.create();
+CITreeSPHousekeeping.prototype = {
+	initialize: function () {
+
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CITreeSPHousekeeping");			
+	},
+	/**SNDOC
+		@name initRecalculateCustomers
+		@description trigger recalcCustomers on CI Tree SP enabled customers
+		@author ATF2
+		*/
+	
+	//TODO: Perhaps chnage to: recalculate all impact trees.
+	initRecalculateCustomers :function() {
+		this.log.debug("Start initRecalculateCustomers" );
+		var custArray = [];
+		
+		//fetch the CI Tree SP enabled customers
+		var ciTreeSPCustomers = new SPConfig().getCITreeSPEnabledCustomers();
+		
+		//convert Array of object to Array of customer sys_id
+		for (var i = 0; i < ciTreeSPCustomers.length; i++ ) {
+			custArray.push(ciTreeSPCustomers[i].sysID);
+			this.log.info("CI Tree SP Enabled Customer: " +ciTreeSPCustomers[i].name);
+		}
+		
+		//
+		new CITreeSP().triggerRecalculateCustomers(custArray);
+		
+		this.log.debug("End initRecalculateCustomers" );
+	},
+	
+	/**SNDOC
+		@name deleteCITreeSPRecWithoutCI
+		@description Deletes CI Tree SP records without CI values
+		@author ATF2
+		*/
+	
+	//TODO: We shouldnt maintain a list of impacting alerts. We have alerts, they are impacting. Alerts have always a ci. 
+	// What may happen is that an impact tree entry doesnt have a real ci anymore bracuse its gone and we have lost track.
+	deleteCITreeSPRecWithoutCI : function(){
+		this.log.debug("Start deleteCITreeSPRecWithoutCI");
+		
+		// Deleting the CI Tree SP records with CI values as EMPTY
+		var emptyCIs = 'alert_ci.sys_idISEMPTY';
+		
+		var grCIEmptyRecords = new GlideRecord('x_atpu_rtsm_ci_tree_state_persistency');
+		grCIEmptyRecords.addEncodedQuery(emptyCIs);
+		this.log.info("deleteCITreeSPRecWithoutCI : CI Tree SP records deleted without CI values ");
+		grCIEmptyRecords.deleteMultiple();
+	
+		this.log.debug("End deleteCITreeSPRecWithoutCI");
+	},
+	
+	type: 'CITreeSPHousekeeping'};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>8b89ee781b08ffc05408a9fe6e4bcba6</sys_id>
+        <sys_mod_count>22</sys_mod_count>
+        <sys_name>CITreeSPHousekeeping</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_8b89ee781b08ffc05408a9fe6e4bcba6</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-28 05:50:57</sys_updated_on>
+    </sys_script_include>
+</record_update>

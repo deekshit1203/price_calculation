@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CIManager</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates the Hash object of all CIs for CI Tree SP CMDB Integration and Filtering . </description>
+        <name>CIManager</name>
+        <script><![CDATA[//TODO: Rethink if that hash is a good idea. May have to be aligned with ITOMS concept of the impact tree as table.
+/**SNDOC
+	@name CIManager
+	@description Hash of all CI's and their related data 
+	@domain Impact Tree
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CIManager = Class.create();
+CIManager.prototype = {
+
+	initialize: function () {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIManager");
+
+		//Hash of all CI's and their related data 
+		this.cis = Object.create(null);
+
+	},
+
+	/**SNDOC
+		@name insertCI
+		@description Inserts a new CI into the manager object
+		@author ATF2
+		@param  {Object} [anonymousObj] - object holding the information about the CI
+		*/
+	insertCI: function (anonymousObj) {
+
+		this.log.debug("[insertCI] Start");
+
+		var ciSysId = anonymousObj["sys_id"];
+		this.log.info("[insertCI] SysId of CI used as hash key for CIManager : " + ciSysId);
+
+		//Check if CI already exists in the cis hash
+		if (ciSysId in this.cis) {
+
+			this.log.info("[insertCI] Ignore INSERT! CI [ " + ciSysId + " ] already exists in the cis hash. ");
+		} else {
+
+			//Insert into cis hash object
+			this.cis[ciSysId] = anonymousObj;
+			this.log.info("[insertCI] cis Hash after New CI was added : " + JSON.stringify(this.cis));
+		}
+		this.log.debug("[insertCI] End");
+	},
+
+
+	/**SNDOC
+		@name getDecommissionedCIs
+		@description Get the decommissioned CIs to be removed. Uses SacmDecommissionedCIinfo()
+		@author ATF2
+		@returns {Array} , array containing sys_ids of all CIs with state as one of (Decommissioned 15, Disposed 18, Retired 6)
+		*/
+	//TODO: Candiate for deletion. Decomissioned CI should be handled by the CMDB queries, not here specifically and intransparent.
+	getDecommissionedCIs: function () {
+
+		this.log.debug("[getDecommissionedCIs] Start");
+		//Create Return array
+		var retArray = [];
+		var dcomStates = [];
+
+		//Get all cis Hash Keys
+		var cisHashKey = Object.keys(this.cis);
+		this.log.info("[getDecommissionedCIs] CIManager Hash: " + JSON.stringify(this.cis));
+
+		//Get decommissioned states from the SACM Script Include
+		var dcom = new SacmDecommissionedCIinfo();
+		dcomStates = dcom.decommissionedStates();
+
+		this.log.info("[getDecommissionedCIs] Decommissioned States are: " + dcomStates[0] + " | " + dcomStates[1] + " | " + dcomStates[2]);
+
+		for (var i = 0; i < cisHashKey.length; i++) {
+
+			//Get value from cis hash for current CI Key
+			var ciOperStatus = this.cis[cisHashKey[i]]["operational_status"];
+			//Convert operational status value to "String"
+			ciOperStatus = ciOperStatus.toString();
+
+			this.log.info("[getDecommissionedCIs] Operational Status of CI [ " + this.cis[cisHashKey[i]]["sys_id"] + " ] is : " + ciOperStatus);
+
+			if (dcomStates.indexOf(ciOperStatus) != -1) {
+
+				this.log.info("[getDecommissionedCIs] Operational Status of CI equals to one of Decommissioned States from SACM");
+				//Add CI sys_id to return array
+				retArray.push(this.cis[cisHashKey[i]]["sys_id"]);
+			}
+
+		}
+
+		this.log.debug("[getDecommissionedCIs] End");
+
+		return retArray;
+
+	},
+
+
+	type: 'CIManager'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>43f201bfdb63f34024d2bb1a689619a2</sys_id>
+        <sys_mod_count>37</sys_mod_count>
+        <sys_name>CIManager</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_43f201bfdb63f34024d2bb1a689619a2</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-10-30 16:50:42</sys_updated_on>
+    </sys_script_include>
+</record_update>

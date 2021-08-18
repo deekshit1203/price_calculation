@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="customer" label="Customer" language="en" table="x_atpu_rtsm_citreesp_cmdb_query_registry">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>customer</element>
+            <help/>
+            <hint/>
+            <label>Customer</label>
+            <language>en</language>
+            <name>x_atpu_rtsm_citreesp_cmdb_query_registry</name>
+            <plural>Customers</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>deekshitulu.malladi@snc</sys_created_by>
+            <sys_created_on>2021-08-18 07:28:59</sys_created_on>
+            <sys_id>a28299a91b427010e5f386a3604bcba1</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Customer</sys_name>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_documentation_x_atpu_rtsm_citreesp_cmdb_query_registry_customer_en</sys_update_name>
+            <sys_updated_by>deekshitulu.malladi@snc</sys_updated_by>
+            <sys_updated_on>2021-08-18 07:28:59</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

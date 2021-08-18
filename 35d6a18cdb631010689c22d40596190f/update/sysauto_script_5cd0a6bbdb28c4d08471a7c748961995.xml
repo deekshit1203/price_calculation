@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sysauto_script">
+    <sysauto_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <business_calendar/>
+        <can_iterate>false</can_iterate>
+        <condition/>
+        <conditional>false</conditional>
+        <entered_time/>
+        <name>CITreeSPDataImport</name>
+        <offset/>
+        <offset_type/>
+        <run_as display_value="System Administrator">6816f79cc0a8016401c5a33be04be441</run_as>
+        <run_as_tz/>
+        <run_dayofmonth>1</run_dayofmonth>
+        <run_dayofweek>1</run_dayofweek>
+        <run_period>1970-01-01 12:00:00</run_period>
+        <run_start>2019-10-24 10:49:42</run_start>
+        <run_time>1969-12-31 19:00:00</run_time>
+        <run_type>daily</run_type>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPDataImport
+	@description Regular CMDB Import
+	This Scheduled Job is running regularly to import the updated CI and CI Relations from the OoB CMDB into the Alert CI Model to reflect the changes done on the CMDB to Alert Management. 
+	To achieve the sync, an entry of type cmdbImportCustomers is inserted into the Processing Queue.
+	SJ runs regularly every 24 h
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+
+RTSMJobs.sj_CITreeSPDataImport();]]></script>
+        <source_filter/>
+        <source_table>cmdb_ci_appl_dot_net</source_table>
+        <sys_class_name>sysauto_script</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>5cd0a6bbdb28c4d08471a7c748961995</sys_id>
+        <sys_mod_count>50</sys_mod_count>
+        <sys_name>CITreeSPDataImport</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sysauto_script_5cd0a6bbdb28c4d08471a7c748961995</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-08-04 14:43:58</sys_updated_on>
+        <time_zone/>
+        <upgrade_safe>false</upgrade_safe>
+    </sysauto_script>
+</record_update>

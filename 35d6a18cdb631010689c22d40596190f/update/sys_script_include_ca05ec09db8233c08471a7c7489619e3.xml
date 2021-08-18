@@ -1,0 +1,1041 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CIRelationManager</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include encapsulates the Hash object of all CI Tree SP CMDB CI Relations. </description>
+        <name>CIRelationManager</name>
+        <script><![CDATA[/**SNDOC
+	@name CIRelationManager
+	@description serialize parent/child information in the impact tree
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CIRelationManager = Class.create();
+CIRelationManager.prototype = {
+	initialize: function () {
+		//this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelationManager");	
+
+		//Hash of all CI's and their Parent and Child CI Relations
+		this.cis = Object.create(null);
+
+		//sys_id of the Customer (Company) the Manager manages the CI Relations for
+		this.customer = "";
+
+		//Used by deserialization to identify object type
+		this.__type = 'CIRelationManager';
+
+		//Keys from cis Hash to be serialized
+		this.serializableKeys = [];
+
+		//Internal counter for every function call to execute getSerializable()
+		this.serializableCounter = 0;
+
+		//Flag to serialize large chunk of data
+		this.serializeLargeChunkData = false;
+	},
+
+	/**SNDOC
+		@name initFromCIRelationManager
+		@description Initialize member variables for CIRelationManager
+		@author ATF2
+		@param  {Object} [ciRelManToInitFrom] - CIRelationManager to initialize from
+		*/
+	initFromCIRelationManager: function (ciRelManToInitFrom) {
+		this.cis = ciRelManToInitFrom.cis;
+		this.customer = ciRelManToInitFrom.customer.toString();
+
+		//this.log.info("[initFromCIRelationManager] Initialize CIRelationManager : cis = " + JSON.stringify(this.cis) + ", customer = " + this.customer);
+	},
+
+
+	/**SNDOC
+		@name getObjectType
+		@description Getter for internal object type "CIRelationManager"
+		@author ATF2
+		@returns {String} Type Used by deserialization
+		*/
+	getObjectType: function () {
+		return this.__type;
+	},
+
+	/**SNDOC
+		@name getCustomer
+		@description  Getter for Customer (Company) the Manager manages the CI Relations
+		@author ATF2
+		@returns {String} sys_id of the Customer
+		*/
+	getCustomer: function () {
+		return this.customer;
+	},
+
+
+	/**SNDOC
+		@name getCIs
+		@description Getter for internal cis hash object
+		@author ATF2
+		@returns {Object} Hash of all CI's and their Parent and Child CI Relations
+		*/
+	getCIs: function () {
+		return this.cis;
+	},
+
+
+	/**SNDOC
+		@name filterImport
+		@description  Handles filtering of the contained CI Relations after the Import step
+		@author ATF2
+		*/
+	filterImport: function () {
+		//Create temporary 'CIRelationManagerFilterImport' Object
+		this.ciRelManFilterImport = new CIRelationManagerFilterImport();
+		this.ciRelManFilterImport.filter(this);
+	},
+
+
+	/**SNDOC
+		@name getSerializable
+		@description Get the CIRelationManager object holding the sliced CIRelations to be serialized
+		@author ATF2
+		@param  {Number} [maximumDataSize] - Maximum data size in Bytes that can be serialized
+		@param  {Object} [serializerObject] - Serializer object used for Serialization
+		@returns {Object} an anonymous object{moreData:boolean, serializable:CIRelationManager}
+		*/
+	getSerializable: function (maximumDataSize, serializerObject) {
+		//this.log.debug("[getSerializable] Start" + "\n" + "Maximum data size in Bytes that can be serialized : " + maximumDataSize);
+
+		var moreData;
+		var tempCiRelMan = new CIRelationManager();
+		tempCiRelMan.customer = this.customer;
+
+		this.totalSize = 0;
+		var parentChildHolder = {};
+
+		//Get the according Size for the Object
+		var envelopeSize = serializerObject.estimateSerializedSize("CIRelationManagerEnvelope");
+		//this.log.info("[getSerializable] Get envelopeSize : " + envelopeSize);
+
+		this.totalSize = this.totalSize + envelopeSize;
+
+		if (this.serializableCounter == 0) {
+			//Get all cis Hash Keys and store in member array
+			this.serializableKeys = Object.keys(this.cis);
+		}
+
+		//Next cis Hash key (CI sys_id) available from member array?
+		while (this.serializableKeys.length > 0) {
+			//this.log.info("[getSerializable] serializableCounter= " + this.serializableCounter + ", serializableKeys= " + this.serializableKeys[0] + ", serializeLargeChunkData=" + this.serializeLargeChunkData);
+
+			//Retrieve the object from cis hash
+			parentChildHolder = this.cis[this.serializableKeys[0]];
+
+			//Calculate the Parent-Child-Holder Size
+			var parentChildHolderSize = serializerObject.estimateSerializedSize("ParentChildHolder", parentChildHolder);
+			//this.log.info("[getSerializable] Get parentChildHolderSize : " + parentChildHolderSize);
+
+			//Current total Size
+			this.totalSize = this.totalSize + parentChildHolderSize;
+			//this.log.info("[getSerializable] Print totalSize : " + this.totalSize);
+
+			// Is the size plus the current Total Size is below the maximum data size, it is possible to serialize that holder.
+			if (this.totalSize <= maximumDataSize) {
+
+				//Add the retrieved object to the temporary object
+				tempCiRelMan.insertParentChildHolder(this.serializableKeys[0], parentChildHolder);
+				//Remove Key from member array "serializableKeys"
+				this.serializableKeys.splice(0, 1);
+			} else if (this.totalSize > maximumDataSize) {
+				// Current Total Size is greater than the maximum data size
+				if (parentChildHolderSize > maximumDataSize) {
+					//this.log.info("[getSerializable] Parent Child holder Size " + parentChildHolderSize + " is greater than maximum data size " + maximumDataSize + ". It is required to SPLIT the Holder");
+					if (this.serializeLargeChunkData == false) {
+
+						this.serializeLargeChunkData = true;
+
+						// Create copy of 'cis' hash – 'tempCIs'
+						this.tempCIs = JSON.parse(JSON.stringify(this.cis));
+
+						this.serializableCounter++;
+						tempCiRelMan.cleanForSerialization();
+
+						// cis hash is empty on temporary CIRelationManager ?  
+						var tempCiRelManCisHashKeys = Object.keys(tempCiRelMan.cis);
+						if (tempCiRelManCisHashKeys.length > 0) {
+							moreData = true;
+
+							//this.log.debug("[getSerializable] End");
+							return {
+								'moreData': moreData,
+								'serializable': tempCiRelMan
+							};
+						} else {
+							continue;
+						}
+
+					} else {
+
+						var maxKeysLimit = 86; // Total no of parent and child entries that can be processed in a single CIRelMan i.e. Max Data Size would be 3307326
+
+						var processEntryFlag = "";
+						var processedParentEntryCount = 0;
+						var processedChildEntryCount = 0;
+
+						var leftOverParentEntries;
+						var leftOverChildEntries;
+						var leftOverEntriesTotal;
+
+						var parentKeysArray = Object.keys(this.tempCIs[this.serializableKeys[0]]["parent"]);
+						var parentKeysCount = parentKeysArray.length;
+
+						var childKeysArray = Object.keys(this.tempCIs[this.serializableKeys[0]]["child"]);
+						var childKeysCount = childKeysArray.length;
+
+						// Find how many Entries to process from either Parent or Child in a single CIRelMan.
+						if (parentKeysCount < maxKeysLimit && parentKeysCount != 0) {
+
+							maxKeysLimit = parentKeysCount;
+							processEntryFlag = "parent";
+
+						} else if (parentKeysCount >= maxKeysLimit) {
+							processEntryFlag = "parent";
+
+						} else if (parentKeysCount == 0 && childKeysCount != 0 && childKeysCount < maxKeysLimit) {
+
+							maxKeysLimit = childKeysCount;
+							processEntryFlag = "child";
+
+						} else if (childKeysCount >= maxKeysLimit) {
+							processEntryFlag = "child";
+
+						} else {
+							//this.log.info("[getSerializable] The parent and child entries are processed for " + this.serializableKeys[0] + " from member array serializableKeys");
+						}
+
+						for (var i = 0; i < maxKeysLimit; i++) {
+
+							var tempCiRelManCopy = new CIRelationManager();
+
+							// Set Customer to return object CIRelationManager 'tempCiRelManCopy'
+							tempCiRelManCopy.customer = this.customer;
+
+							if (processEntryFlag == "parent") {
+								var parentHolder = this.tempCIs[this.serializableKeys[0]]["parent"][parentKeysArray[i]];
+								var parentKey = parentKeysArray[i];
+
+								// Add Parent Key object "parentHolder" to tempCiRelManCopy
+								tempCiRelManCopy.insertParentHolder(this.serializableKeys[0], parentHolder, parentKey);
+
+								//Remove Parent Key from member array 'tempCIs'
+								delete this.tempCIs[this.serializableKeys[0]]["parent"][parentKeysArray[i]];
+
+								processedParentEntryCount++;
+							}
+
+							if (processEntryFlag == "child") {
+								var childHolder = this.tempCIs[this.serializableKeys[0]]["child"][childKeysArray[i]];
+								var childKey = childKeysArray[i];
+
+								// Add Child Key object "childHolder" to tempCiRelManCopy
+								tempCiRelManCopy.insertChildHolder(this.serializableKeys[0], childHolder, childKey);
+
+								//Remove Child Key from member array 'tempCIs'
+								delete this.tempCIs[this.serializableKeys[0]]["child"][childKeysArray[i]];
+
+								processedChildEntryCount++;
+							}
+						}
+
+						leftOverParentEntries = parentKeysCount - processedParentEntryCount;
+						leftOverChildEntries = childKeysCount - processedChildEntryCount;
+
+						// Get Total Count of unprocessed "parent" and "child" entries
+						leftOverEntriesTotal = leftOverParentEntries + leftOverChildEntries;
+
+						// Is Count of unprocessed Entries == 0 ?
+						if (leftOverEntriesTotal == 0) {
+							this.serializeLargeChunkData = false;
+
+							// Remove Key from member array "serializableKeys"
+							this.serializableKeys.splice(0, 1);
+
+							// Check if member array with cis hash keys contains atleast one key
+							if (this.serializableKeys.length >= 1) {
+
+								// Increment internal counter, when there are more relations to be processed for the Customer
+								this.serializableCounter++;
+								moreData = true;
+							} else {
+								moreData = false;
+							}
+						} else {
+							// Increment internal counter, when there are more relations to be processed for the Customer
+							moreData = true;
+						}
+
+						tempCiRelManCopy.cleanForSerialization();
+
+						//this.log.debug("[getSerializable] End");
+						return {
+							'moreData': moreData,
+							'serializable': tempCiRelManCopy
+						};
+					}
+				} else {
+					break;
+				}
+			} else {
+				break;
+			}
+		}
+		tempCiRelMan.cleanForSerialization();
+
+		// Check if member array with cis hash keys contains atleast one key
+		if (this.serializableKeys.length >= 1) {
+
+			// Increment internal counter, when there are more relations to be processed for the Customer
+			this.serializableCounter++;
+			moreData = true;
+
+		} else {
+			moreData = false;
+		}
+		//this.log.debug("[getSerializable] End");
+
+		return {
+			'moreData': moreData,
+			'serializable': tempCiRelMan
+		};
+	},
+
+	/**SNDOC
+		@name cleanForSerialization
+		@description delete properties [log, serializableKeys, serializableCounter, serializeLargeChunkData]
+		@author ATF2
+		*/
+	cleanForSerialization: function () {
+		delete this["log"];
+		delete this["serializableKeys"];
+		delete this["serializableCounter"];
+		delete this["serializeLargeChunkData"];
+	},
+
+
+	/**SNDOC
+		@name resetSerializable
+		@description Clear member "serializableKeys" by removing all elements from the array.
+Function is called when all data is serialized and an additional serialization run is needed
+		@author ATF2
+		*/
+	resetSerializable: function () {
+		//this.log.debug("[resetSerializable] Start");
+		//this.log.info("[resetSerializable] Length of serializableKeys : " + this.serializableKeys.length);
+
+		//Clear member "serializableKeys" by removing all elements from the array
+		for (var i = 0; i < this.serializableKeys.length; i++) {
+			var removedElement = this.serializableKeys.splice(i);
+			//this.log.info("[resetSerializable] Removed elements from array :" + removedElement);
+		}
+		//this.log.debug("[resetSerializable] End");
+	},
+
+	/**SNDOC
+		@name insertParentChildHolders
+		@description 
+		@author ATF2
+		@param  {Object} [ciRelMan] - CIRelationManager, which Parent-Child-Holders is to be inserted in the local object
+		*/
+	insertParentChildHolders: function (ciRelMan) {
+		//this.log.debug("[insertParentChildHolders] Start");
+		//Get Keys of Param1 Object
+		var parentChildHolderKeys = Object.keys(ciRelMan.cis);
+
+		for (var i = 0; i < parentChildHolderKeys.length; i++) {
+			this.insertParentChildHolder(parentChildHolderKeys[i], ciRelMan.cis[parentChildHolderKeys[i]]);
+		}
+		//this.log.debug("[insertParentChildHolders] End");
+	},
+
+	/**
+	 * @param {String} sys_id of CI used as hash key for Parent-Child-Holder
+	 * @param {Object} Object holding "parent" and "child" sys_id and CI Relations from cis hash object
+	 *
+	 */
+	/**SNDOC
+		@name insertParentChildHolder
+		@description Insert into cis hash object
+		@author ATF2
+		@param  {String} [ciSysId] -  sys_id of CI used as hash key for Parent-Child-Holder
+		@param  {String} [parentChildHolder] - Object holding "parent" and "child" sys_id and CI Relations from cis hash object
+		@returns {String} 
+		*/
+	insertParentChildHolder: function (ciSysId, parentChildHolder) {
+		//this.log.debug("[insertParentChildHolder] Start");
+
+		// cis hash contains Param1 ?
+		if (ciSysId in this.cis) {
+			//this.log.info("[insertParentChildHolder] SysId of CI exists in hash : " + ciSysId);
+
+			// cis hash contains "parent" property for given Param1 CI sys_id ?
+			if (!this.cis[ciSysId]["parent"]) {
+				this.cis[ciSysId]["parent"] = {};
+			}
+
+			// Get "parent" object from Param2
+			var parentObject = parentChildHolder["parent"];
+			if (!parentObject) {
+				//this.log.info("[insertParentChildHolder] Parent object is empty");
+			} else {
+				// Get all "parent" keys from Param2 object
+				var parentObjKeys = Object.keys(parentObject);
+
+				// Next parent key from Param2 available ?
+				for (var i = 0; i < parentObjKeys.length; i++) {
+
+					this.cis[ciSysId]["parent"][parentObjKeys[i]] = parentChildHolder["parent"][parentObjKeys[i]];
+				}
+			}
+
+			// cis hash contains "child" property for given Param1 CI sys_id ?
+			if (!this.cis[ciSysId]["child"]) {
+				this.cis[ciSysId]["child"] = {};
+			}
+
+			// Get "child" object from Param2
+			var childObject = parentChildHolder["child"];
+			if (!childObject) {
+				//this.log.info("[insertParentChildHolder] Child object is empty");
+			} else {
+				// Get all "child" keys from Param2 object
+				var childObjKeys = Object.keys(childObject);
+
+				// Next child key from Param2 available ?
+				for (var j = 0; j < childObjKeys.length; j++) {
+
+					this.cis[ciSysId]["child"][childObjKeys[j]] = parentChildHolder["child"][childObjKeys[j]];
+				}
+			}
+		} else {
+			//Insert into cis hash object
+			this.cis[ciSysId] = parentChildHolder;
+		}
+
+		//this.log.debug("[insertParentChildHolder] End");
+	},
+
+	/**SNDOC
+		@name insertParentHolder
+		@description 
+		@author ATF2
+		@param  {String} [ciSysId] - sys_id of CI used as hash key for Parent-Child-Holder
+		@param  {Object} [parentHolder] - Object holding "parent" CI Relations from cis hash object
+		@param  {String} [parentKey] - sys_id of Parent CI used as hash key for Parent-Holder
+		*/
+	insertParentHolder: function (ciSysId, parentHolder, parentKey) {
+		//this.log.debug("[insertParentHolder] Start");
+
+		// cis hash contains Param1 ?
+		if (ciSysId in this.cis) {
+			//this.log.info("[insertParentHolder] SysId of CI " + ciSysId + " exists in cis hash.");
+			this.cis[ciSysId]["parent"][parentKey] = parentHolder;
+		} else {
+			this.cis[ciSysId] = {};
+			this.cis[ciSysId]["parent"] = {};
+			this.cis[ciSysId]["parent"][parentKey] = parentHolder;
+		}
+		//this.log.debug("[insertParentHolder] End");
+	},
+
+
+	/**SNDOC
+		@name insertChildHolder
+		@description 
+		@author ATF2
+		@param {String} [sys_id] - sys_id of CI used as hash key for Parent-Child-Holder
+		@param {Object} [Object] - object holding "child" CI Relations from cis hash object
+		@param {String} [sys_id] - sys_idof Child CI used as hash key for Child-Holder
+		@returns {String} 
+		*/
+	insertChildHolder: function (ciSysId, childHolder, childKey) {
+		//this.log.debug("[insertChildHolder] Start");
+
+		// cis hash contains Param1 ?
+		if (ciSysId in this.cis) {
+			//this.log.info("[insertChildHolder] SysId of CI " + ciSysId + " exists in cis hash.");
+			this.cis[ciSysId]["child"][childKey] = childHolder;
+		} else {
+			this.cis[ciSysId] = {};
+			this.cis[ciSysId]["child"] = {};
+			this.cis[ciSysId]["child"][childKey] = childHolder;
+		}
+		//this.log.debug("[insertChildHolder] End");
+	},
+
+
+	/**SNDOC
+		@name removeCI
+		@description Removes a CI from the CI Relation Manager including the CI Relation from and to this CI
+		@author ATF2
+		@param  {String} [ciSysIdString] - sys_id of CI to be removed from the CIRelationManager
+		@returns {Object} "checkForUnconnected" object containing sys_id's of CI's, or null
+		*/
+	removeCI: function (ciSysIdString) {
+		//this.log.debug("[removeCI] Start" + "\n" + "sys_id of CI to be removed from the CIRelationManager : " + ciSysIdString);
+		//Create temporary object
+		var tempObj = Object.create(null);
+		//Get Object from cis Hash for given Param1 CI sys_id
+		var getObj = this.cis[ciSysIdString];
+
+		if (Object.keys(getObj).length) {
+			//Param1 CI Found in cis hash
+			//this.log.info("[removeCI] CI Found in cis hash");
+			//Get "child" from returned Param1 object
+			var childObj = getObj["child"];
+			//Get all Keys of "child" Object
+			var childObjKeys = Object.keys(childObj);
+
+			for (var j = 0; j < childObjKeys.length; j++) {
+				//Next Child Key available ?
+				this.removeRelationFromCI(childObjKeys[j], ciSysIdString, "parent");
+				//Store Child key in checkForUnconnected" object
+				tempObj[childObjKeys[j]] = childObj;
+			}
+
+			//Get "parent" from returned Param1 object
+			var parentObj = getObj["parent"];
+			//Get all Keys of "parent" Object
+			var parentObjKeys = Object.keys(parentObj);
+
+			for (var k = 0; k < parentObjKeys.length; k++) {
+				//Next Parent Key available?
+				this.removeRelationFromCI(parentObjKeys[k], ciSysIdString, "child");
+				//Store Parent key in "checkForUnconnected" object
+				tempObj[parentObjKeys[k]] = parentObj;
+			}
+
+			//Remove Object for Param1 CI from cis Hash
+			delete this.cis[ciSysIdString];
+
+			//this.log.info("[removeCI] cis Hash after CIRelation was removed :  " + JSON.stringify(this.cis));
+			//this.log.debug("[removeCI] End");
+			//Return temporary object to be stored in "checkForUnconnected" object
+			return tempObj;
+		}
+
+		//this.log.info("[removeCI] Get Keys from cis Hash without removal : " + Object.keys(this.cis));
+		//this.log.debug("[removeCI] End");
+		//Returns empty object
+		return tempObj;
+	},
+
+	/**SNDOC
+		@name removeCIRelation
+		@description Triggers for removal of a CI Relation from the Manager
+		@author ATF2
+		@param  {Object} [ciRelationObj] - CIRelation Object containing the CI Relation that should be removed from the CIRelationManager
+		*/
+	removeCIRelation: function (ciRelationObj) {
+		//this.log.debug("[removeCIRelation] Start");
+
+		//child sys_id of CI Relation
+		var ciRelationChildSysId = ciRelationObj["child"]["sys_id"];
+		//parent sys_id of CI Relation
+		var ciRelationParentSysId = ciRelationObj["parent"]["sys_id"];
+
+		this.removeRelationFromCI(ciRelationChildSysId, ciRelationParentSysId, "parent");
+		this.removeRelationFromCI(ciRelationParentSysId, ciRelationChildSysId, "child");
+
+		//this.log.info("[removeCIRelation] cis Hash after CIRelation was removed :  " + JSON.stringify(this.cis));
+		//this.log.debug("[removeCIRelation] End");
+	},
+
+	/**SNDOC
+		@name removeRelationFromCI
+		@description Removes a CI Relation for a CI from the CIRelationManager
+		@author ATF2
+		@param  {String} [ciSysId] - sys_id of CI for which a Relation should be removed
+		@param  {String} [removeCIsysId] - sys_id of CI which should be removed
+		@param  {String} [ciRelation] - "parent" or "child" depending from where the CI should be removed
+		*/
+	removeRelationFromCI: function (ciSysId, removeCIsysId, ciRelation) {
+		//this.log.debug("[removeRelationFromCI] Start" + "\n" + "sys_id of CI for which a Relation should be removed [ " + ciSysId + " ]" + "\n" + "sys_id of CI which should be removed [ " + removeCIsysId + " ]" + "\n" + "CIRelation from where it should be removed [ " + ciRelation + " ]");
+
+		var childObj = {};
+		var parentObj = {};
+		//Get Object from cis Hash for given Param1 CI sys_id
+		var getObj = this.cis[ciSysId];
+
+		if (Object.keys(getObj).length) {
+			//CI Found in cis hash
+			//this.log.info("[removeRelationFromCI] CI Found in cis hash");
+			if (ciRelation === "child") {
+				//Remove Param2 sys_id from retrieved object
+				delete this.cis[ciSysId]["child"][removeCIsysId];
+			} else {
+				if (ciRelation === "parent") {
+					//Remove Param2 sys_id from retrieved object
+					delete this.cis[ciSysId]["parent"][removeCIsysId];
+				}
+			}
+		}
+		//this.log.debug("[removeRelationFromCI] End");
+	},
+
+
+	/**SNDOC
+		@name removeUnconnectedCIs
+		@description 
+		@author ATF2
+		@param  {Object} [unconnectedCIsObj] - Removes all CI's from the cis hash object, that do not contain any "child" or "parent" connections anymore
+		@returns {Integer} Number (>=0) of unconnected CI's being removed from the cis hash
+		*/
+	removeUnconnectedCIs: function (unconnectedCIsObj) {
+		//this.log.debug("[removeUnconnectedCIs] Start");
+		var ciRelObj = {};
+		var removed = 0;
+
+		//Get Keys of Param1 Object
+		var ciRelKeysForUnconnected = Object.keys(unconnectedCIsObj);
+		//this.log.info("[removeUnconnectedCIs] Get Keys from Param1 Object :" + ciRelKeysForUnconnected);
+
+		for (var i = 0; i < ciRelKeysForUnconnected.length; i++) {
+			//Get Object from ci Hash for given sys_id
+			ciRelObj = this.cis[ciRelKeysForUnconnected[i]];
+
+			if (Object.keys(ciRelObj).length) {
+				//Object for CI Found
+				//this.log.info("[removeUnconnectedCIs] Object for CI Found. Print ciRelObj : " + JSON.stringify(ciRelObj));
+				//Get "parent" from retrieved object
+				var parentObj = ciRelObj["parent"];
+				// Get Keys from "parent" object
+				var parentRelKeys = Object.keys(parentObj);
+
+				//this.log.info("[removeUnconnectedCIs] Print parentObj : " + JSON.stringify(parentObj) + ", Amount of Keys of Parent Object is " + parentRelKeys);
+				if (parentRelKeys.length === 0) {
+					//Get "child" from retrieved object
+					var childObj = ciRelObj["child"];
+					// Get Keys from "child" object
+					var childRelKeys = Object.keys(childObj);
+
+					//this.log.info("[removeUnconnectedCIs] Amount of Keys of Parent Object is 0. Length of Child Object is " + childRelKeys.length);
+					if (childRelKeys.length === 0) {
+						//this.log.info("[removeUnconnectedCIs] Amount of Keys of Child Object is 0. Remove unconnected CI= " + ciRelKeysForUnconnected[i]);
+						//Remove Param1 Object from cis Hash
+						delete this.cis[ciRelKeysForUnconnected[i]];
+						//Increase local variable "removed" by 1
+						removed++;
+					}
+				}
+				//this.log.info("[removeUnconnectedCIs] Removed unconnected CI Count= " + removed + ", cis Hash after CIRelation was removed :  " + JSON.stringify(this.cis));
+			}
+		}
+		//this.log.debug("[removeUnconnectedCIs] End");
+		return removed;
+	},
+
+
+	/**SNDOC
+		@name insertCIRelation
+		@description Inserts a new CI Relation into the manager object
+		@author ATF2
+		@param  {Object} [ciRelationObject] - CIRelation, new CI Relation to be inserted into the Manager
+		@returns {Boolean} true ->Object was added or already existed, false ->Object was omitted due to an error
+		*/
+	insertCIRelation: function (ciRelationObject) {
+		//this.log.debug("[insertCIRelation] Start ");
+
+		//this.log.info("[insertCIRelation] Customer of Child CI= " + ciRelationObject["child"]["company"] + ", Customer of Parent CI= " + ciRelationObject["parent"]["company"]);
+		//Get the sys_id of Parent CI from Param1
+		var parentCiSysId = ciRelationObject["parent"]["sys_id"];
+		//Get the sys_id of Child CI from Param1
+		var chdCiSysId = ciRelationObject["child"]["sys_id"];
+
+		//this.log.info("[insertCIRelation] Child sys_id from CIRelation " + chdCiSysId + ", Parent sys_id from CIRelation " + parentCiSysId);
+
+		//this.log.logObject(this.cis, '[this.cis]');
+		//this.log.debug('parentCiSysId: ' + parentCiSysId);
+
+		//Check if cis hash contains sys_id of Parent CI from CIRelation
+
+		/*TODO AR HACK DISABLE becauese of Problems with hasOwnProperty
+		if (this.cis.hasOwnProperty(parentCiSysId)) {
+			//this.log.info("[insertCIRelation] cis hash contains sys_id of Parent CI from CIRelation");
+
+			//Check if returned object contains sys_id of Child CI within the "child" object
+			if (this.cis[parentCiSysId]["child"].hasOwnProperty(chdCiSysId)) {
+				//this.log.info("[insertCIRelation] returned object contains sys_id of Child CI within the child object");
+				//CIRelation already exists in the Manager
+				//this.log.debug("[insertCIRelation] End ");
+				return true;
+			}
+		}
+		*/
+		this._addCIRelation(ciRelationObject);
+		//this.log.debug("[insertCIRelation] End ");
+		//CIRelation was added to the Manager
+		return true;
+	},
+
+	/**SNDOC
+		@name _addCIRelation
+		@description Adds the new CI Relation into the internal cis Hash object.
+		@author ATF2
+		@param  {Object} [insCIRelationObject] - CIRelation, new CI Relation to be inserted into the manager
+		*/
+	_addCIRelation: function (insCIRelationObject) {
+		//this.log.debug("[_addCIRelation] Start");
+		//Parent-Child-Holder
+		var parent_child_holder = Object.create(null);
+
+		//Get the sys_id of Parent CI from Param1
+		var parentCiSysId = insCIRelationObject["parent"]["sys_id"];
+		//this.log.info("[_addCIRelation] Parent sys_id from CIRelation : " + parentCiSysId);
+		//Get the sys_id of Child CI from Param1
+		var childCiSysId = insCIRelationObject["child"]["sys_id"];
+		//this.log.info("[_addCIRelation] Child sys_id from CIRelation : " + childCiSysId);
+
+		if (parentCiSysId in this.cis) {
+			//cis hash already contains sys_id of Parent CI from CIRelation
+			//this.log.info("[_addCIRelation] cis hash already contains sys_id of Parent CI from CIRelation");
+			//Get Parent-Child-Holder for sys_id of Parent CI from cis hash
+			parent_child_holder = this.cis[parentCiSysId];
+		} else {
+			//this.log.info("[_addCIRelation] cis hash does Not contains sys_id of Parent CI from CIRelation");
+
+			//Add Parent CI to cis hash { Key: sys_id of Parent CI, Value: new empty object }
+			this.cis[parentCiSysId] = Object.create(null);
+			//Add to empty object { Key: "child" , Value: new empty object }
+			this.cis[parentCiSysId]["child"] = Object.create(null);
+			//Add to empty object { Key: "parent" , Value: new empty object }
+			this.cis[parentCiSysId]["parent"] = Object.create(null);
+
+			//Get Parent-Child-Holder for sys_id of Parent CI from cis hash
+			parent_child_holder = this.cis[parentCiSysId];
+		}
+
+		//Add to "child" of Parent-Child-Holder { Key: sys_id of Child CI of CI Relation , Value: Param1 }
+		parent_child_holder["child"][childCiSysId] = insCIRelationObject;
+
+		if (childCiSysId in this.cis) {
+			//cis hash already contains sys_id of Child CI from CIRelation
+			//this.log.info("[_addCIRelation] cis hash already contains sys_id of Child CI from CIRelation");
+
+			//Get Parent-Child-Holder for sys_id of Child CI from cis hash
+			parent_child_holder = this.cis[childCiSysId];
+		} else {
+			//this.log.info("[_addCIRelation] cis hash does Not contains sys_id of Child CI from CIRelation");
+
+			//Add Child CI to cis hash { Key: sys_id of Child CI, Value: new empty object }
+			this.cis[childCiSysId] = Object.create(null);
+			//Add to empty object { Key: "parent" , Value: new empty object }
+			this.cis[childCiSysId]["parent"] = Object.create(null);
+			//Add to empty object {Key: "child" , Value: new empty object}
+			this.cis[childCiSysId]["child"] = Object.create(null);
+
+			//Get Parent-Child-Holder for sys_id of Child CI from cis hash
+			parent_child_holder = this.cis[childCiSysId];
+		}
+		//Add to "parent" of Parent-Child-Holder { Key: sys_id of Parent CI of CI Relation , Value: Param1 }
+		parent_child_holder["parent"][parentCiSysId] = insCIRelationObject;
+
+		//this.log.info("[_addCIRelation] cis Hash after New CIRelation was added : " + JSON.stringify(this.cis));
+		//this.log.debug("[_addCIRelation] End");
+	},
+
+	/**SNDOC
+		@name createCIManager
+		@description 
+		@author ATF2
+		@param  {String} [] - 
+		@returns {Object} CIManager object holding all CI's and their related data
+		*/
+	createCIManager: function () {
+		//this.log.debug("[createCIManager] Start");
+		//Create temporary "CIManager" Object
+		var tempCiMan = new CIManager();
+		var chdObj = {};
+		var parentObj = {};
+
+		//Get keys from cis Hash
+		var cisHashKeys = Object.keys(this.cis);
+		//this.log.info("[createCIManager] cis Hash Keys: " + cisHashKeys);
+
+		for (var i = 0; i < cisHashKeys.length; i++) {
+			//Get Child Object
+			chdObj = this.cis[cisHashKeys[i]]["child"];
+			// Get Keys from "child" object
+			var chdObjKeys = Object.keys(chdObj);
+			for (var j = 0; j < chdObjKeys.length; j++) {
+				//Next Child Key available ?
+				var ciManObjectOfChildKey = chdObj[chdObjKeys[j]]["child"];
+				tempCiMan.insertCI(ciManObjectOfChildKey);
+			}
+
+			//Get Parent Object
+			parentObj = this.cis[cisHashKeys[i]]["parent"];
+			// Get Keys from "parent" object
+			var parentObjKeys = Object.keys(parentObj);
+			for (var k = 0; k < parentObjKeys.length; k++) {
+				//Next Parent Key available ?
+				var ciManObjectOfParentKey = parentObj[parentObjKeys[k]]["parent"];
+				tempCiMan.insertCI(ciManObjectOfParentKey);
+			}
+		}
+		//this.log.debug("[createCIManager] End");
+		//Return temporary "CIManager" Object
+		return tempCiMan;
+	},
+
+	/**SNDOC
+		@name getUniqueCIRelationCount
+		@description 
+		@author ATF2
+		@returns {Number} Number of unique CI Relations inthe CIs hash
+		*/
+	getUniqueCIRelationCount: function () {
+		var hashKeys = Object.keys(this.cis);
+		//this.log.info("[getUniqueCIRelationCount] : Hash Keys - " + hashKeys);
+		var parentObj = {};
+		this.serializableCounter = 0;
+
+		for (var i = 0; i < hashKeys.length; i++) {
+			//Get parent object
+			parentObj = this.cis[hashKeys[i]]["parent"];
+			//Get parent keys
+			var parentKeys = Object.keys(parentObj);
+			//this.log.info("[getUniqueCIRelationCount] : Parent Keys - " + parentKeys);
+			//Add number of keys to counter
+			this.serializableCounter = this.serializableCounter + Object.keys(parentObj).length;
+			//this.log.info("[getUniqueCIRelationCount] : Added keys to counter - " + this.serializableCounter);
+		}
+		//this.log.info("[getUniqueCIRelationCount] : Returned counter - " + this.serializableCounter);
+		return this.serializableCounter;
+	},
+
+	/**SNDOC
+		@name getDecommissionedCICount
+		@description 
+		@author ATF2
+		@returns {Number} number of decomissioned CI
+		*/
+	getDecommissionedCICount: function () {
+		//this.log.debug("[getDecommissionedCICount] Start");
+		var decommCiCount = this.ciRelManFilterImport.getDecommissionedCICount();
+		//this.log.info("[getDecommissionedCICount] : Decommissioned CI Count = " + decommCiCount);
+
+		if (decommCiCount >= 0) {
+			//this.log.debug("[getDecommissionedCICount] End");
+			return decommCiCount;
+		}
+	},
+
+	/**SNDOC
+		@name getOutOfScopeCIRelCount
+		@description 
+		@author ATF2
+		@param  {String} [] - 
+		@returns {Number} number of relations out of scope
+		*/
+	getOutOfScopeCIRelCount: function () {
+		//this.log.debug("[getOutOfScopeCIRelCount] Start");
+		var outOfScopeCiCount = this.ciRelManFilterImport.getOutOfScopeCIRelCount();
+		//this.log.info("[getOutOfScopeCIRelCount] : Out of Scope CI Count = " + outOfScopeCiCount);
+
+		if (outOfScopeCiCount >= 0) {
+			//this.log.debug("[getOutOfScopeCIRelCount] End");
+			return outOfScopeCiCount;
+		}
+	},
+
+	getRemovedUnconnectedCICount: function () {
+		//this.log.debug("[getRemovedUnconnectedCICount] Start");
+		var unconnectedCiCount = this.ciRelManFilterImport.getRemovedUnconnectedCICount();
+		//this.log.info("[getRemovedUnconnectedCICount] : Removed unconnected CI Count = " + unconnectedCiCount);
+
+		if (unconnectedCiCount >= 0) {
+			//this.log.debug("[getRemovedUnconnectedCICount] End");
+			return unconnectedCiCount;
+		}
+	},
+
+	/**SNDOC
+		@name detectChanges
+		@description 
+		@author ATF2
+		@param  {Object} [newCiRelMan] -  CIRelationManager that contains the new CI Relations to check against for any changes
+		@returns {Array} for each change the array contains an entry of type XXX
+		*/
+	detectChanges: function (newCiRelMan) {
+		log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelationManager");	
+		log.debug("[detectChanges CIRelationManager] Start");
+
+		try {
+			//Create temporary 'CIRelationManagerChangeDetector' Object
+			this.changeDetector = new CIRelationManagerChangeDetector();
+			this.changeDetector.detectChanges(this, newCiRelMan);
+		} catch (err) {	
+			this.error = err.message + "\n" + err.stack;
+			this.result.setError(this.error);	
+		}
+		log.debug("[detectChanges CIRelationManager] End");
+	},
+
+	/**SNDOC
+		@name getDeletedCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} 
+		*/
+	getDeletedCIRelations: function () {
+		return this.changeDetector.getDeletedCIRelations();
+	},
+
+	/**SNDOC
+		@name getAddedCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} 
+		*/
+	getAddedCIRelations: function () {
+		return this.changeDetector.getAddedCIRelations();
+	},
+
+	/**SNDOC
+		@name getModifiedPercentCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} 
+		*/
+	getModifiedPercentCIRelations: function () {
+		return this.changeDetector.getModifiedPercentCIRelations();
+	},
+
+	/**SNDOC
+		@name getModifiedCompanyCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} 
+		*/
+	getModifiedCompanyCIRelations: function () {
+		return this.changeDetector.getModifiedCompanyCIRelations();
+	},
+
+	/**SNDOC
+		@name getModifiedStrengthCIRelations
+		@description 
+		@author ATF2
+		@returns {Array} 
+		*/
+	getModifiedStrengthCIRelations: function () {
+		return this.changeDetector.getModifiedStrengthCIRelations();
+	},
+
+	/**SNDOC
+		@name getRelationsAsHash
+		@description 
+		@author ATF2
+		@param  {Array} [ciRelConnStrengthArray] - Array of String, undefined->Return all CI Relations, defined-> Return only CI Relations matching the provided Connection Strength strings of the array (Always, Cluster, Infrequent, Occasional)
+		@param  {Integer} [ciRelationFlag] - undefined-> Return all CI Relations, ACTIONABLE-> Return only CI Relations where Child CI Company equals Company of CIRelationManager, NON_ACTIONABLE-> Return only CI Relations where Child CI Company DOES NOT equal Company of CIRelationManager
+		@returns {Object}, Hash object containing all CI Relations with key in the format <parent sys_id>-<child sys_id> and CIRelation object assigned as value
+		*/
+	getRelationsAsHash: function (ciRelConnStrengthArray, ciRelationFlag) {
+		log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CIRelationManager");	
+		log.debug("[getRelationsAsHash] Start");
+		var childObj = {};
+		var returnHashKey;
+		var childCiRelation = new CIRelation();
+		var ciRelHash = Object.create(null);
+
+		//Get keys from cis Hash
+		var cisHashKeys = Object.keys(this.cis);
+
+		log.info("[getRelationsAsHash] Customer = " + this.customer + ", CI Relations = " + JSON.stringify(this.cis));
+		log.info("[getRelationsAsHash] cis Hash length = " + cisHashKeys.length);
+
+		for (var i = 0; i < cisHashKeys.length; i++) {
+			//Get Child Object
+			childObj = this.cis[cisHashKeys[i]]["child"];
+			//Get Keys from "child" object
+			var childObjKeys = Object.keys(childObj);
+			log.info("[getRelationsAsHash] cis Hash child object length = " + childObjKeys.length);
+
+			for (var j = 0; j < childObjKeys.length; j++) {
+				//Next Key of Child Object available ?
+				childCiRelation = childObj[childObjKeys[j]];
+				this.ret = this.ciRelationMatchesActionable(childCiRelation, ciRelationFlag);
+				//Is CI Relation actionable?
+				if (this.ret === true) {
+					//CI Relation "ACTIONABLE"
+					log.info("[getRelationsAsHash] CI Relation ACTIONABLE");
+
+					if (ciRelConnStrengthArray !== null) {
+						log.info("[getRelationsAsHash] ciRelConnStrengthArray !== null");
+						this.ret = childCiRelation.matchesConnectionStrength(ciRelConnStrengthArray);
+						if (this.ret === true) {
+							log.info("[getRelationsAsHash] matchesConnectionStrength returned true");
+							//Insert into return hash
+							returnHashKey = cisHashKeys[i] + "-" + childObjKeys[j];
+							ciRelHash[returnHashKey] = childCiRelation;
+						} else
+							log.info("[getRelationsAsHash] matchesConnectionStrength returned false");
+					} else {
+						log.info("[getRelationsAsHash] ciRelConnStrengthArray is null");
+						//Insert into return hash
+						returnHashKey = cisHashKeys[i] + "-" + childObjKeys[j];
+						ciRelHash[returnHashKey] = childCiRelation;
+					}
+					log.info("[getRelationsAsHash] returnHashKey= " + returnHashKey);
+				}
+			}
+		}
+		log.debug("[getRelationsAsHash] End");
+		return ciRelHash;
+	},
+
+
+	/**SNDOC
+		@name ciRelationMatchesActionable
+		@description 
+		@author ATF2
+		@param  {Object} [ciRelationObj] - CIRelation, CI Relation object to be checked whether it is actionable or not
+		@param  {Boolean} [ciRelationFlag] - true-> CI Relation is actionable, false-> CI Relation is NOT actionable
+		@returns {Boolean}, true-> CI Relation is actionable, false-> CI Relation is NOT actionable
+		*/
+	ciRelationMatchesActionable: function (ciRelationObj, ciRelationFlag) {
+
+		if (ciRelationFlag === CIRelationManagerChangeDetector.TYPE_ACTIONABLE) {
+			//this.log.info("[ciRelationMatchesActionable] CI Relation is actionable. Company of Child from CI Relation = " + ciRelationObj.child.company);
+			if (ciRelationObj.child.company === this.customer) {
+				return true;
+			} else {
+				return false;
+			}
+		} else {
+			if (ciRelationFlag === CIRelationManagerChangeDetector.TYPE_NON_ACTIONABLE) {
+				if (ciRelationObj.child.company === this.customer) {
+					return false;
+				} else {
+					return true;
+				}
+			}
+		}
+	},
+
+	type: 'CIRelationManager'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>ca05ec09db8233c08471a7c7489619e3</sys_id>
+        <sys_mod_count>432</sys_mod_count>
+        <sys_name>CIRelationManager</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_ca05ec09db8233c08471a7c7489619e3</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-19 08:14:36</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sa_context_menu">
+    <sa_context_menu action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <condition>!window.NOW['isWorkspace'] &amp;&amp; ( item.isRealCi() || (item.isGroup() &amp;&amp; !item.isAutoGroup()))</condition>
+        <item>node</item>
+        <name>Create Alert</name>
+        <order/>
+        <script><![CDATA[/**
+   * Script executed on the client for this menu action
+   * 'item' is a reference to the map's node or link
+   * 'item.id' is equal to the sys_id of the Configuration Item or Relationship
+   * 'builderArgs' - if item type is Node or Relationship, then builderArgs will provide extended arguments about the current item, such as incoming endpoints and originalEdge object.
+  **/ 
+if (angular.isDefined(item.cid)){
+	var url = '$ngbsm.do?id=' + item.cid;
+	var newWin = window.open(url, '_blank');
+	if(!newWin || newWin.closed || angular.isUndefined(newWin.closed)) 
+		sncEventScope.broadcast(sncGlobals.EVT_REPORT_INFO, i18n.getMessage("Turn off your pop-up blocker!"));
+}
+ 
+]]></script>
+        <sys_class_name>sa_context_menu</sys_class_name>
+        <sys_created_by>hendrik.muller</sys_created_by>
+        <sys_created_on>2020-11-05 10:32:36</sys_created_on>
+        <sys_id>c4c5096ddb982410689c22d40596194e</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>Create Alert</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sa_context_menu_c4c5096ddb982410689c22d40596194e</sys_update_name>
+        <sys_updated_by>hendrik.muller</sys_updated_by>
+        <sys_updated_on>2020-11-05 10:37:49</sys_updated_on>
+        <target>all</target>
+        <type>menu</type>
+    </sa_context_menu>
+    <sys_translated_text action="delete_multiple" query="documentkey=c4c5096ddb982410689c22d40596194e"/>
+</record_update>

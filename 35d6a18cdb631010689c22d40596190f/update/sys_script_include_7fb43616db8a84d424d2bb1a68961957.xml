@@ -1,0 +1,700 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CMDBCIRelation</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>CMDBCIRelation</name>
+        <script><![CDATA[/**SNDOC
+	@name CMDBCIRelation
+	@description 
+	@domain Impact Tree
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CMDBCIRelation = Class.create();
+CMDBCIRelation.prototype = {
+    /**SNDOC
+    	@name initialize
+    	@description 
+    	*/
+    initialize: function() {
+        this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "CMDBCIRelation");
+        this.error = null;
+
+        this.parentExisted = false; //Parent CI existed while processing 
+        this.childExisted = false; //Child CI existed while processing 
+    },
+    /**SNDOC
+    	@name getError
+    	@description 
+    	*/
+    getError: function() {
+        return this.error;
+    },
+    /**SNDOC
+    	@name createCIRelationManager
+    	@description 
+    	@param {String} [custSysId] - sys_id of Customer for which the CIRelationManager should be built for
+    	@returns {CIRelationManager} CIRelationManager holding all CIRelations from the current model for the given Customer
+    	*/
+    createCIRelationManager: function(custSysId) {
+        this.log.debug("[createCIRelationManager] Start");
+        var tempCiRelManager = new CIRelationManager();
+        tempCiRelManager.customer = custSysId;
+
+        var alertCmdbRelGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        var q1 = alertCmdbRelGR.addQuery('parent_int_ref.company', '=', custSysId);
+        q1.addOrCondition('child_int_ref.company', '=', custSysId);
+        alertCmdbRelGR.query();
+
+        while (alertCmdbRelGR.next()) {
+            //Next CI Relation from Model available?
+            var tempCiRelation = new CIRelation();
+            this.log.info("[createCIRelationManager] Parent = " + alertCmdbRelGR.parent.name.toString() + ", Child = " + alertCmdbRelGR.child.name.toString());
+            tempCiRelation.initFromAlertCMDBRelCI(alertCmdbRelGR);
+            tempCiRelManager.insertCIRelation(tempCiRelation);
+        }
+        this.log.debug("[createCIRelationManager] End");
+        return tempCiRelManager;
+    },
+    /**SNDOC
+    	@name lock
+    	@description 
+    	@param {CIRelation} [ciRelObj] -  CIRelation object that should be modified and thus be locked
+    	*/
+    lock: function(ciRelObj) {
+        this.log.info("[lock] Start");
+        var semaphoreWaitTimeAttribute = Number(new RTSMUtil().getProperty(RTSMConst.citreesp_semaphore_wait_time));
+
+        this.log.info("[lock] semaphoreWaitTimeAttribute: " + semaphoreWaitTimeAttribute);
+
+        var parentSysId = ciRelObj.parent.sys_id;
+        this.log.info("[lock] parent sys id: " + parentSysId);
+
+        var childSysId = ciRelObj.child.sys_id;
+        this.log.info("[lock] child sys id: " + childSysId);
+
+        this.semaphore = new DatabaseSemaphore(parentSysId + "-" + childSysId, null, 'CMDBCIRelation', semaphoreWaitTimeAttribute);
+
+        this.log.info("[lock] Semaphore Object: " + this.semaphore);
+        this.semaphore.lock();
+        this.log.debug("[lock] End");
+    },
+    /**SNDOC
+    	@name unlock
+    	@description 
+    	@param {*} [ciRelHash] -  not clear if its really used
+    	*/
+    unlock: function(ciRelHash) {
+        this.log.debug("[unlock] Start");
+
+        this.semaphore.unlock();
+        this.log.debug("[unlock] End");
+    },
+    /**SNDOC
+    	@name deleteCIRelation
+    	@description 
+    	@param {CIRelation} [ciRelObj] - CIRelation, the object contains the CI relation to be deleted
+    	@returns {Boolean} true->CI Relation has been deleted, false->CI Relation was not deleted
+    	*/
+    deleteCIRelation: function(ciRelObj) {
+        this.log.debug("[CMDBCIRelation][deleteCIRelation] Start");
+        var returnValue;
+        var parentSysId = ciRelObj.parent.sys_id;
+        var childSysId = ciRelObj.child.sys_id;
+
+        var alertCiRelGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        alertCiRelGR.addQuery('parent_int_ref.cmdb_ci', '=', parentSysId);
+        alertCiRelGR.addQuery('child_int_ref.cmdb_ci', '=', childSysId);
+        alertCiRelGR.query();
+        this.log.debug('[deleteCIRelation] alertCiRelGR= ' + RTSMLog.logQuery(alertCiRelGR));
+
+        //Is CI relation available?
+        if (alertCiRelGR.next()) {
+            if ((alertCiRelGR.parent_int_ref.company.toString() === ciRelObj.parent.company) && (alertCiRelGR.child_int_ref.company.toString() === ciRelObj.child.company)) {
+                //Parent and Child CI's Company loaded from Model are equal to Company values from Param1 CI Relation
+                alertCiRelGR.deleteRecord();
+                returnValue = true;
+                this.log.info("[CMDBCIRelation][deleteCIRelation] Deleted CI Relation from Model. Parent = " + ciRelObj.parent.sys_id + ", Child = " + ciRelObj.child.sys_id);
+                this.deleteUnconnectedCI(parentSysId);
+                this.deleteUnconnectedCI(childSysId);
+            } else {
+                returnValue = false;
+            }
+        } else {
+            returnValue = false;
+        }
+
+        this.log.debug("[CMDBCIRelation][deleteCIRelation] End");
+        return returnValue;
+    },
+    /**SNDOC
+    	@name updateCIRelation
+    	@description 
+    	@param {CMDBCIRelation} [ciRelObj] - CIRelation, the object contains the CI relation to be updated
+    	@returns {Boolean}   true->CI Relation has been updated, false->CI Relation was not updated
+    	*/
+    updateCIRelation: function(ciRelObj) {
+        this.log.info("[CMDBCIRelation][updateCIRelation] Start");
+
+        var returnValue = false;
+        var parentSysId = ciRelObj.parent.sys_id;
+        var childSysId = ciRelObj.child.sys_id;
+
+        var alertCiRelGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        alertCiRelGR.addQuery('parent_int_ref.cmdb_ci', '=', parentSysId);
+        alertCiRelGR.addQuery('child_int_ref.cmdb_ci', '=', childSysId);
+        alertCiRelGR.query();
+
+        //Is CI relation available?
+        if (alertCiRelGR.next()) {
+
+            if ((alertCiRelGR.percent_outage !== ciRelObj.percent_outage)) {
+                //Parent and Child CI's percentOutage loaded from Model are equal to percentOutage from Param1 CI Relation
+                alertCiRelGR.percent_outage = ciRelObj.percent_outage;
+                returnValue = true;
+                this.log.info('[updateCIRelation] percent_outage - returnValue' + returnValue);
+            }
+
+            if (alertCiRelGR.connection_strength !== ciRelObj.connection_strength) {
+                //Parent and Child CI's connectionstrength loaded from Model are equal to connectionstrength from Param1 CI Relation
+                alertCiRelGR.connection_strength = ciRelObj.connection_strength;
+                returnValue = true;
+                this.log.info('[updateCIRelation] connection_strength - returnValue' + returnValue);
+            }
+            if (returnValue == true) {
+                alertCiRelGR.update();
+            }
+        } else {
+            returnValue = null;
+            this.error = "CI Relation with Parent CI: " + parentSysId + " and Child CI: " + childSysId + " does not exist in alert CMDB CI Relation";
+        }
+
+
+        if (returnValue == false) {
+            this.error = "CI Relation with Parent CI: " + parentSysId + " and Child CI: " + childSysId + " is not updated because Percent Outage and Connection Strength is unchanged";
+        }
+        this.log.info("[CMDBCIRelation][updateCIRelation] Return Value = " + returnValue + ", Parent = " + parentSysId + ", Child = " + childSysId);
+
+        this.log.info("[CMDBCIRelation][updateCIRelation]: Error " + this.error);
+        this.log.debug("[CMDBCIRelation][updateCIRelation] End");
+        return returnValue;
+
+    },
+    /**SNDOC
+    	@name deleteUnconnectedCI
+    	@description 
+    	@param {String} [ciSysId] - sys_id of the CI that should be deleted if it is unconnected
+    	*/
+    deleteUnconnectedCI: function(ciSysId) {
+        this.log.debug("[deleteUnconnectedCI] Start");
+        var ciRelCount;
+
+        var alertCiGR = new GlideAggregate('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        var q1 = alertCiGR.addQuery('parent', '=', ciSysId);
+        q1.addOrCondition('child', '=', ciSysId);
+        alertCiGR.addAggregate('COUNT');
+        alertCiGR.query();
+
+        if (alertCiGR.next()) {
+            ciRelCount = alertCiGR.getAggregate('COUNT');
+            this.log.info("[deleteUnconnectedCI]: ciRelCount= " + ciRelCount);
+        }
+
+        ciRelCount = parseInt(ciRelCount); //String to Integer
+
+        if (ciRelCount === 0) {
+            this.log.info("[deleteUnconnectedCI] SysID of CI that should be deleted as it is unconnected = " + ciSysId);
+
+            // If CI was deleted from OoB, the orphan records in CI Tree SP are deleted thru SJ housekeepingDaily
+            // If CI exists in OoB, the SP record is deleted from CI Tree SP.
+            new CITreeSP().deleteSP(ciSysId);
+
+            var ciObject = new CI();
+            ciObject.deleteCI(ciSysId);
+        }
+
+        this.log.debug("[deleteUnconnectedCI] End");
+    },
+    /**SNDOC
+    	@name getParentCIRelationCount
+    	@description 
+    	@param {String} [childCiSysId] - sys_id of the CI that should be checked as Child CI for the number of connected Parent CIs
+    	@returns {Integer} number (>=0) of CIRelations where the CI is the Child
+    	*/
+    getParentCIRelationCount: function(childCiSysId) {
+        this.log.debug("[getParentCIRelationCount] Start");
+        var parentCiRelCount = 0;
+
+        this.log.info("[getParentCIRelationCount] SysId of the CI that should be checked as Child CI for the number of connected Parent CIs = " + childCiSysId);
+        var ciRelationGR = new GlideAggregate('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        ciRelationGR.addQuery('child', '=', childCiSysId);
+        ciRelationGR.addAggregate('COUNT');
+        ciRelationGR.query();
+
+        if (ciRelationGR.next()) {
+            parentCiRelCount = ciRelationGR.getAggregate('COUNT');
+            this.log.info("[getParentCIRelationCount]: parentCiRelCount= " + parentCiRelCount);
+        }
+
+        this.log.debug("[getParentCIRelationCount] End");
+        return parentCiRelCount;
+    },
+    /**SNDOC
+    	@name getParentCIRelations
+    	@description 
+    	@param {String} [childSysId] - sys_id of the CI that should be checked as Child CI to get the Parent CI relations
+    	@returns {Array}   Alert CI Relations Objects where the Child CI is Param 1
+    	*/
+    getParentCIRelations: function(childSysId) {
+        this.log.debug("[getChildCIRelations] Start");
+        var returnArray = [];
+        var tempCiRelation;
+
+        var ciRelationGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        ciRelationGR.addQuery('child', '=', childSysId);
+        ciRelationGR.query();
+
+        while (ciRelationGR.next()) {
+            //Next CI relation available?
+            tempCiRelation = new CIRelation();
+            tempCiRelation.initFromAlertCMDBRelCI(ciRelationGR);
+
+            //Add temp CIRelation object to return array
+            returnArray.push(tempCiRelation);
+        }
+
+        this.log.debug("[getChildCIRelations] End");
+        return returnArray;
+    },
+
+    getParentCIRelationSG: function(childSysId) {
+        this.log.debug("[getParentCIRelationSG] Start");
+        var returnArray = [];
+		var cis = [];
+
+		//if ITOM connectors, we return relation starting from the connectors instead, otherwise (RTSM), get relation normally
+        var ci_domain = new SubGraphUtil().getDomain(childSysId);
+		if (ci_domain == 'ITOM') {
+			cis = this._getConnectorCIs(childSysId);
+		} else {
+			cis.push(childSysId);
+		}
+
+		for (var c=0; c< cis.length; c++) {
+			var ciSysID = cis[c];
+
+			var sg = (new SubGraphAPI()).getSubGraph(ciSysID, 'getParentCIRelationSG', 'outbound', 0);
+			
+			var vertices = sg.vertices;
+			var edges = sg.edges;
+			
+			var sorted_vertices = this._sortVertices(vertices, edges);
+			for (var k = 0; k < sorted_vertices.length; k++) {
+				var child = sorted_vertices[k];
+
+				var edges_from_current_vertice = this._findEdgesByFrom(child.id ,edges);
+				if (edges_from_current_vertice && edges_from_current_vertice.length > 0) {
+					for (i = 0; i < edges_from_current_vertice.length; i++) {
+						var edge = edges_from_current_vertice[i];
+						var parent = this._findVerticeById(edge.to ,vertices);
+
+						if (parent && child && edge) {
+							tempCiRelation = new CIRelation();
+							tempCiRelation.initFromSubPGraph(parent, child, edge);
+
+							returnArray.push(tempCiRelation);
+						}
+					}
+				}
+			}
+		}
+
+        this.log.debug("[getParentCIRelationSG] End");
+		return returnArray;
+	},
+	
+	_findVerticeById: function(id, vertices) {
+		for (var i=0; i< vertices.length; i++) {
+			if (vertices[i].id == id) {
+				return vertices[i];
+			}
+		}
+		return '';
+	},
+	
+	_findEdgesByFrom: function(from, edges) {
+		var edges_found = [];
+		
+		for (var i=0; i< edges.length; i++) {
+			if (edges[i].from == from) {
+				edges_found.push(edges[i]);
+			}
+		}
+		
+		return edges_found;
+	},
+
+	_hasInbound: function(id, edges) {
+		for (var i=0; i< edges.length; i++) {
+			if (edges[i].to == id) {
+				return true;
+			}
+		}
+		return false;
+	},
+
+	_removeBotCIEdge: function(id, edges) {
+		for (var i=0; i< edges.length; i++) {
+			if (edges[i].from == id) {
+				edges.splice(i, 1);
+			}
+		}
+
+		return edges;
+	},
+
+	_sortVertices: function(vertices, edges) {
+		var sorted_vertices = [];
+		
+		var tempt_edges = [];
+		for (var c=0; c< edges.length; c++) {
+			tempt_edges.push(edges[c]);
+		}
+		
+		var tempt_vertices = [];
+		for (var d=0; d< vertices.length; d++) {
+			tempt_vertices.push(vertices[d]);
+		}
+
+		while (tempt_vertices.length > 0) {
+			for (var i=0; i< tempt_vertices.length; i++) {
+				var cur_id = tempt_vertices[i].id;
+				
+				if (this._hasInbound(cur_id, tempt_edges) == false) {
+					sorted_vertices.push(tempt_vertices[i]);
+					tempt_vertices.splice(i, 1);
+					tempt_edges = this._removeBotCIEdge(cur_id, tempt_edges);
+				}
+			}
+		}
+
+		return sorted_vertices;
+	},
+
+	_getConnectorCIs: function(CISysID) {
+		var returnArray = [];
+
+        var result = (new SubGraphAPI()).getConnectors(CISysID, 'CMDBCIRelation._getConnectorCIs', 'outbound', 0);
+        if (result && result.vertices) {
+            var connectors = result.vertices;
+
+            for (i = 0; i < connectors.length; i++) {
+				if (connectors[i].id) {
+					returnArray.push(connectors[i].id);
+				}
+            }
+        }
+
+        return returnArray;
+    },
+
+    /**SNDOC
+    	@name getChildCIRelations
+    	@description 
+    	@param {String} [parentSysId] - sys_id of the Parent CI
+    	@returns {Array} with CIRelation of CI Tree SP CMDB Relationship table, Array can be empty
+    	*/
+    getChildCIRelations: function(parentSysId) {
+        this.log.debug("[getChildCIRelations] Start");
+        var returnArray = [];
+        var tempCiRelation;
+
+        var ciRelationGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        ciRelationGR.addQuery('parent', '=', parentSysId);
+        ciRelationGR.query();
+
+        while (ciRelationGR.next()) {
+            //Next CI relation available?
+            tempCiRelation = new CIRelation();
+            tempCiRelation.initFromAlertCMDBRelCI(ciRelationGR);
+            //Add temp CIRelation to return array
+            returnArray.push(tempCiRelation);
+        }
+
+        this.log.debug("[getChildCIRelations] End");
+        return returnArray;
+    },
+    /**SNDOC
+    	@name addCIRelation
+    	@description 
+    	@param {CIRelation} [ciRelationObj] - CIRelation, the object contains the CI relation to be added
+    	@returns {Boolean}   true->CI Relation has been added, false->CI Relation already existed, null->Error while processing 
+    	*/
+    addCIRelation: function(ciRelationObj) {
+        this.log.debug("[CMDBCIRelation][addCIRelation] Start");
+        var ciRelationGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+
+        var resultForParent = this.handleParentCIExistence(ciRelationObj);
+        this.log.info("[CMDBCIRelation][addCIRelation]  handleParentCIExistence returned = " + resultForParent);
+        if (resultForParent === true) {
+            // Handling was successful
+
+            var resultForChild = this.handleChildCIExistence(ciRelationObj);
+            this.log.info("[CMDBCIRelation][addCIRelation]  handleParentCIExistence returned = " + resultForChild);
+
+            this.log.debug("[addCIRelation] percent_outage: " + ciRelationObj.percent_outage);
+
+            if (resultForChild === true) {
+                // Handling was successful
+                if (this.parentExisted === false || this.childExisted === false) {
+                    // Then we can omit checking the existence of the CI Relation
+                    // GlideRecord For x_atpu_rtsm_rtsm_cmdb_rel_ci
+                    var ret = this._insertCiRelationEntry(ciRelationObj.parent.sys_id, ciRelationObj.child.sys_id, ciRelationObj.connection_strength, ciRelationObj.percent_outage, ciRelationObj.type.sys_id);
+
+                    this.log.debug("[addCIRelation] End");
+                    return ret;
+                } else {
+                    var resultForCiRelation = this.ciRelationExists(ciRelationObj);
+                    if (resultForCiRelation === true) {
+                        // CI Relation exists
+                        this.log.debug("[addCIRelation] End");
+                        return false;
+                    }
+
+                    var result = this._insertCiRelationEntry(ciRelationObj.parent.sys_id, ciRelationObj.child.sys_id, ciRelationObj.connection_strength, ciRelationObj.percent_outage, ciRelationObj.type.sys_id);
+
+                    this.log.debug("[CMDBCIRelation][addCIRelation] End");
+                    return result;
+                }
+            }
+        }
+
+        this.log.debug("[CMDBCIRelation][addCIRelation] End");
+        return null;
+    },
+    /**SNDOC
+    	@name _insertCiRelationEntry
+    	@description  Inserts a new record into the Alert CMDB Relations Table
+    	@param {string} [parentSysId] -  of the Parent CI
+    	@param {string} [childSysId] -  of the Child CI
+    	@param {string} [connectionStrength] -  Connection Strength, e.g. Always, Cluster
+    	@param {integer} [percentOutage] -  Percent Outage value for Cluster CI Relation
+    	@param {string} [type] -  sys_id of Type for the CI Relation
+    	@returns {Boolean} true->CI Relation has been added, null->Error while inserting the record
+    	@private
+    	*/
+    _insertCiRelationEntry: function(parentSysId, childSysId, connectionStrength, percentOutage, type) {
+        var ciRelationGR = new GlideRecord('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        // GlideRecord For x_atpu_rtsm_rtsm_cmdb_rel_ci
+        ciRelationGR.parent = parentSysId;
+        ciRelationGR.parent_int_ref = this.parentCISysID;
+        ciRelationGR.child = childSysId;
+        ciRelationGR.child_int_ref = this.childCISysID;
+        ciRelationGR.connection_strength = connectionStrength;
+        ciRelationGR.percent_outage = percentOutage;
+        ciRelationGR.type = type;
+
+        this.log.debug("[_insertCiRelationEntry] percentOutage: " + percentOutage);
+        this.log.debug("[_insertCiRelationEntry] ciRelationGR.percent_outage: " + ciRelationGR.percent_outage);
+
+        var insertSuccess = ciRelationGR.insert();
+        if (insertSuccess == null) {
+            // Set Error
+            this.error = "Error while inserting CI Relation from Parent CI [" + parentSysId + "] to Child CI [" + childSysId + "] into Alert CMDB CI Relations ";
+            this.log.info(this.error);
+            this.log.debug("[addCIRelation] End");
+            return null;
+        }
+
+        return true;
+    },
+    /**SNDOC
+    	@name handleParentCIExistence
+    	@description 
+    	@param {CIRelation} [ciRelationObj] - CIRelation, the object contains the CI relation which Parent CI should be handled
+    	@returns {Boolean}    true->handling Parent CI was successful, false->Error while handling Parent CI
+    	*/
+    handleParentCIExistence: function(ciRelationObj) {
+        this.log.debug("[handleParentCIExistence] Start");
+
+        var parentCiTreeSP = new CITreeSP();
+        var parentCiObject = new CI();
+
+        var isRoot = false;
+        var parentCompany = ciRelationObj.parent.company;
+        var parentCiSysId = ciRelationObj.parent.sys_id;
+
+        parentCiObject.lock(parentCiSysId);
+
+        this.log.info("[handleParentCIExistence] Parent SysID [" + parentCiSysId + "], Parent Company [" + parentCompany + "]");
+
+        var grSysId = parentCiObject.exists(parentCiSysId);
+        if (grSysId !== null) {
+            this.log.info("[handleParentCIExistence]  Parent CI Exists");
+            // Parent CI Exists
+            this.parentCISysID = grSysId;
+            this.parentExisted = true;
+            var ret = parentCiObject.update(parentCiSysId, parentCompany);
+            parentCiObject.unlock();
+
+            if (ret == null) {
+                // Get error from CI and store in member error
+                this.error = parentCiObject.getError();
+                this.log.debug("[handleParentCIExistence] End");
+                return false;
+            } else {
+                this.log.info("[handleParentCIExistence]  Always update to align the isRoot flag");
+
+                this.log.info("[handleParentCIExistence]  Before call to updateSP");
+                // Always update to align the isRoot flag		
+                parentCiTreeSP.lockSP(ciRelationObj.parent.sys_id, null);
+                parentCiTreeSP.updateSP(parentCiSysId, {
+                    company: parentCompany,
+                    isRoot: isRoot
+                });
+                parentCiTreeSP.unlockSP();
+
+                this.log.info("[handleParentCIExistence]  After call to updateSP");
+                this.log.debug("[handleParentCIExistence] End");
+                return true;
+            }
+        } else {
+            this.log.info("[handleParentCIExistence]  Parent CI does Not Exists");
+            var insertCiSysId = parentCiObject.create(parentCiSysId, parentCompany);
+            parentCiObject.unlock();
+            if (insertCiSysId == null) {
+                // Get error from CI and store in member error
+                this.error = parentCiObject.getError();
+                this.log.debug("[handleParentCIExistence] End");
+                return false;
+            } else {
+                this.parentCISysID = insertCiSysId;
+
+                this.log.info("[handleParentCIExistence] SysId of Parent CI inserted in Alert CMDB CI = " + this.parentCISysID);
+
+                parentCiTreeSP.lockSP(parentCiSysId);
+                parentCiTreeSP.addSP(parentCiSysId, false);
+                parentCiTreeSP.unlockSP();
+                this.log.debug("[handleParentCIExistence] End");
+                return true;
+            }
+        }
+    },
+    /**SNDOC
+    	@name handleChildCIExistence
+    	@description 
+    	@param {ciRelationObj} [ciRelationObj] -  CIRelation, the object contains the CI relation which Child CI should be handled
+    	@returns {Boolean} true->handling Child CI was successful, false->Error while handling Child CI
+    	*/
+    handleChildCIExistence: function(ciRelationObj) {
+        this.log.debug("[handleChildCIExistence] Start");
+
+        var childCiTreeSP = new CITreeSP();
+        var childCiObject = new CI();
+
+        var childCompany = ciRelationObj.child.company;
+        var childCiSysId = ciRelationObj.child.sys_id;
+        childCiObject.lock(childCiSysId);
+
+        this.log.info("[handleChildCIExistence] Child SysID [" + childCiSysId + "], Child Company [" + childCompany + "]");
+
+        var grSysId = childCiObject.exists(childCiSysId);
+        if (grSysId !== null) {
+            this.log.info("[handleChildCIExistence] Child CI Exists");
+            // Child CI Exists
+            this.childCISysID = grSysId;
+            this.childExisted = true;
+
+            var ret = childCiObject.update(childCiSysId, childCompany);
+            childCiObject.unlock();
+
+            if (ret == null) {
+                // Get error from CI and store in member error
+                this.error = childCiObject.getError();
+                this.log.debug("[handleChildCIExistence] End");
+                return false;
+            } else {
+
+                if (ret === true) {
+                    // Only update when the Company was modified, the isRoot flag is not updated here
+                    childCiTreeSP.lockSP(childCiSysId);
+                    childCiTreeSP.updateSP(childCiSysId, {
+                        company: null,
+                        isRoot: null
+                    });
+                    childCiTreeSP.unlockSP();
+                }
+
+                this.log.debug("[handleChildCIExistence] End");
+                return true;
+            }
+
+        } else {
+            this.log.info("[handleChildCIExistence] Child CI does Not Exists");
+            var insertCiSysId = childCiObject.create(childCiSysId, childCompany);
+            childCiObject.unlock();
+            if (insertCiSysId == null) {
+                // Get error from CI and store in member error
+                this.error = childCiObject.getError();
+                this.log.debug("[handleChildCIExistence] End");
+                return false;
+            } else {
+                this.childCISysID = insertCiSysId;
+
+                childCiTreeSP.lockSP(childCiSysId);
+                childCiTreeSP.addSP(childCiSysId, true);
+                childCiTreeSP.unlockSP();
+                this.log.debug("[handleChildCIExistence] End");
+                return true;
+            }
+        }
+    },
+    /**SNDOC
+    	@name 
+    	@description 
+    	@param {CIRelation} [ciRelationObj] - CIRelation, the object contains the CI relation which should be checked for existence
+    	@returns {Boolean} true->CI Relation from this Parent to Child exists, false->CI Relation from this Parent to Child does not exist
+    	*/
+    ciRelationExists: function(ciRelationObj) {
+        this.log.debug("[ciRelationExists] Start");
+        var entryCount = 0;
+
+        var alertCiRelGR = new GlideAggregate('x_atpu_rtsm_rtsm_cmdb_rel_ci');
+        alertCiRelGR.addQuery('parent', '=', ciRelationObj.parent.sys_id);
+        alertCiRelGR.addQuery('child', '=', ciRelationObj.child.sys_id);
+        alertCiRelGR.addAggregate('COUNT');
+        alertCiRelGR.query();
+
+        if (alertCiRelGR.next()) {
+            entryCount = alertCiRelGR.getAggregate('COUNT');
+        }
+
+        if (entryCount == 0) {
+            this.log.debug("[ciRelationExists] End");
+            return false;
+        } else {
+            this.log.debug("[ciRelationExists] End");
+            return true;
+        }
+    },
+
+    type: 'CMDBCIRelation'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>7fb43616db8a84d424d2bb1a68961957</sys_id>
+        <sys_mod_count>178</sys_mod_count>
+        <sys_name>CMDBCIRelation</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_7fb43616db8a84d424d2bb1a68961957</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-08-11 06:49:22</sys_updated_on>
+    </sys_script_include>
+</record_update>

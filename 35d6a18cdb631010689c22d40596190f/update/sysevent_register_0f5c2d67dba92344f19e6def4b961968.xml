@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sysevent_register">
+    <sysevent_register action="INSERT_OR_UPDATE">
+        <caller_access/>
+        <description/>
+        <event_name>x_atpu_rtsm.citreesp_queue_handler</event_name>
+        <fired_by>SI FunnelQueueExecutor</fired_by>
+        <queue>citreesp</queue>
+        <suffix>citreesp_queue_handler</suffix>
+        <sys_class_name>sysevent_register</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>0f5c2d67dba92344f19e6def4b961968</sys_id>
+        <sys_mod_count>16</sys_mod_count>
+        <sys_name>x_atpu_rtsm.citreesp_queue_handler</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sysevent_register_0f5c2d67dba92344f19e6def4b961968</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-11-10 12:55:57</sys_updated_on>
+        <table>x_atpu_rtsm_citreesp_queue</table>
+    </sysevent_register>
+</record_update>

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CITreeSPProcessorEnableCustomer</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Processor for queue type enableCustomerRTSM</description>
+        <name>CITreeSPProcessorEnableCustomer</name>
+        <script><![CDATA[/**SNDOC
+	@name CITreeSPProcessorEnableCustomer
+	@description 
+	@domain Impact Tree Builder
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var CITreeSPProcessorEnableCustomer = Class.create();
+CITreeSPProcessorEnableCustomer.prototype = Object.extendsObject(CITreeSPProcessor, {
+	initialize: function () {
+		CITreeSPProcessor.prototype.initialize.call(this);
+		this.log = new RTSMLog(RTSMLog.LOG_DM_IMPACT_CALC, "CITreeSPProcessorEnableCustomer");
+	},
+	/**SNDOC
+		@name process
+		@description 
+		*/
+	process: function () {
+		this.log.debug("[process][CITreeSPProcessorEnableCustomer] Start");
+
+		this.importCustomerObj = new CITreeSPImportCustomers();
+
+		try {
+			var custSysId = this.queueEntry.getValue("customer");
+			var resultObj = this.importCustomerObj.isImportCustomersRunning(this.queueEntry.getValue("sys_created_on"));
+
+			// Is import run finished ?
+			if (resultObj.importRunning === true) {
+				// Due to State = Ready the entry will be reprocessed
+				this.result.setState(this.qState.READY);
+				this.error = "Scheduled Customers import not finished yet. Enablement is delayed. " + resultObj.customerTargetCount + " Customers to be imported in total, " + resultObj.customerOngoingCount + " Customers are currently imported ";
+				this.result.setErrorMessage(this.error);
+				this.result.validLeaves = resultObj.customerOngoingCount;
+				this.result.deadLeaves = resultObj.customerTargetCount;
+				this.result.uniqueCis = resultObj.customerStartedCount;
+				this.log.debug("End [process]");
+				return;
+			}
+
+			var ret = this.importCustomerObj.isEnableDisableCustomerRunning(this.queueEntry.getValue("sys_created_on"), custSysId);
+			if (ret === true) {
+				// Due to State = Ready the entry will be reprocessed
+				this.result.setState(this.qState.READY);
+				this.error = "Previous Enable customer or Disable customer not finished yet. Enablement is delayed.";
+				this.log.info("[process] " + this.error);
+				this.result.setErrorMessage(this.error);
+				this.result.validLeaves = 0;
+				this.result.deadLeaves = 0;
+				this.result.uniqueCis = 0;
+				this.log.debug("End [process]");
+				return;
+			}
+
+			//First run, no entry is available yet
+			var registryCount = new CITreeSPQueryRegistry().getRegistryEntryCount();
+			this.log.info("[process]: Registry Entry count is - " + registryCount);
+
+			if (registryCount != 0) {
+
+				var importRun = this.importCustomerObj.runImport(custSysId);
+				if (importRun === false) {
+					//Get error message from CITreeSPImportCustomers
+					this.error = this.importCustomerObj.getError();
+					this._setResultToError();
+					this.log.debug("End [process]");
+					return;
+				} else {
+					// AR ARROW
+					//this.log.logObject(this.importCustomersObj, 'process: importCustomersObj');					
+					var dataFilterSuccess = this.triggerDataFilter(this.importCustomerObj);
+					if (dataFilterSuccess === false) {
+						this._setResultToError();
+						this.log.debug("End [process]");
+						return;
+					}
+				}
+
+				//triggerDataFilter was successful
+				this.result.setOk();
+				this.result.validLeaves = this.triggeredCustomers;
+				this.result.deadLeaves = this.importCustomerObj.getImportedQueriesCount();
+				this.result.uniqueCis = this.totalUniqueCIRelationCount;
+			} else {
+				//Nothing is configured
+				this.result.setOk();
+				this.error = "No Queries configured for Customer " + this.queueEntry.getDisplayValue("customer") + " in the CMDB Query Registry";
+				this.result.setErrorMessage(this.error);
+			}
+		} catch (err) {
+			// AR ARROW
+			this.error = err.message + "\n" + err.stack;
+			this.result.setError(this.error);
+		}
+
+		this.log.debug("[process][CITreeSPProcessorEnableCustomer] End");
+	},
+	/**SNDOC
+		@name _setResultToError
+		@private
+		@description 
+		*/
+	_setResultToError: function () {
+		this.result.setError(this.error);
+		this.result.validLeaves = this.triggeredCustomers;
+		this.result.deadLeaves = this.importCustomerObj.getImportedQueriesCount();
+		this.result.uniqueCis = this.totalUniqueCIRelationCount;
+	},
+
+
+	type: 'CITreeSPProcessorEnableCustomer'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-12-07 11:35:13</sys_created_on>
+        <sys_id>7417c6b3db786c90689c22d4059619fd</sys_id>
+        <sys_mod_count>8</sys_mod_count>
+        <sys_name>CITreeSPProcessorEnableCustomer</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_7417c6b3db786c90689c22d4059619fd</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:35:47</sys_updated_on>
+    </sys_script_include>
+</record_update>

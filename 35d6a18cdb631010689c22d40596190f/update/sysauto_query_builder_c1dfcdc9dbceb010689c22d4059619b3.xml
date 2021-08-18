@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sysauto_query_builder">
+    <sysauto_query_builder action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <address_list/>
+        <business_calendar/>
+        <condition/>
+        <conditional>false</conditional>
+        <entered_time/>
+        <group_list/>
+        <name>CI Tree SP CMDB Data Import</name>
+        <offset/>
+        <offset_type>0</offset_type>
+        <omit_if_no_records>false</omit_if_no_records>
+        <output_type>CSV</output_type>
+        <query display_value="">7d7c371cdb6c3450689c22d405961916</query>
+        <report_body/>
+        <report_title/>
+        <run_as display_value="">9fca7360db0fe410689c22d40596193c</run_as>
+        <run_as_tz/>
+        <run_dayofmonth>1</run_dayofmonth>
+        <run_dayofweek/>
+        <run_period/>
+        <run_start>2021-08-16 18:00:12</run_start>
+        <run_time/>
+        <run_type>once</run_type>
+        <sys_class_name>sysauto_query_builder</sys_class_name>
+        <sys_created_by>RTSM QueryBuilderUser</sys_created_by>
+        <sys_created_on>2021-08-16 18:00:12</sys_created_on>
+        <sys_id>c1dfcdc9dbceb010689c22d4059619b3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CI Tree SP CMDB Data Import</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sysauto_query_builder_c1dfcdc9dbceb010689c22d4059619b3</sys_update_name>
+        <sys_updated_by>RTSM QueryBuilderUser</sys_updated_by>
+        <sys_updated_on>2021-08-16 18:00:12</sys_updated_on>
+        <time_zone/>
+        <upgrade_safe>false</upgrade_safe>
+        <user_list/>
+        <zip>false</zip>
+    </sysauto_query_builder>
+</record_update>

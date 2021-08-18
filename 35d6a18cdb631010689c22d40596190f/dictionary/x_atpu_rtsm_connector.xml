@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="Connector" max_length="40" name="x_atpu_rtsm_connector" type="collection">
+        <element default="true" label="Active" max_length="40" name="active" type="boolean"/>
+        <element label="Class" mandatory="true" max_length="80" name="class_name" type="table_name"/>
+        <element label="RTSM Domain" mandatory="true" max_length="32" name="rtsm_domain" reference="x_atpu_rtsm_rtsm_domain" type="reference"/>
+        <index name="index">
+            <element name="rtsm_domain"/>
+        </index>
+    </element>
+</database>

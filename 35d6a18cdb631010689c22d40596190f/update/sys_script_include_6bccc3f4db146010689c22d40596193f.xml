@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.RTSMLog</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Logging class for RTSM. Extends global.GSLog.</description>
+        <name>RTSMLog</name>
+        <script><![CDATA[/**SNDOC
+	@name RTSMLog
+	@description Extends Logging Class GSLog
+	https://docs.servicenow.com/bundle/paris-application-development/page/script/useful-scripts/reference/r_GSLog.html
+	Logs can be at the level of Debug, Info, Notice, Warning, Err, or Crit (after BSD syslog.h and followers). 
+	The default logging level is Notice, so levels should be chosen accordingly.
+	
+	Changes in GSLog.log() needed
+		// Property from RTSM Property Table
+		
+		// >>> RTSM Change
+		if (scriptPrefix.indexOf('RTSM') > -1)
+			scriptPrefix = scriptPrefix.replace('*** Script','');
+		// <<<<
+
+	//Changes in GSLog is not necessary for other instances
+
+	@domain Utilities
+	@author Andreas Reermann
+	@example log = new global.RTSMLog('x_atpu_rtsm.GSLog.logLevel',"HelloWorld");
+	@require(GSLog)
+	@version 1.0.0
+	*/
+var RTSMLog = Class.create();
+
+RTSMLog.prototype = Object.extendsObject(global.GSLog, 
+{
+    initialize : function(caller, msgPrefix) {
+
+		this.grUtil = new GlideRecordUtil();
+		this._srcSufix = msgPrefix;
+		this._msgPrefix = msgPrefix;
+
+		_src = "";
+
+		switch (caller) {
+			case RTSMLog.LOG_DM_CITREE: 
+				traceProperty = RTSMConst.loglevel_impact_tree; 
+				_src = "TREE";
+				break;
+			case RTSMLog.LOG_DM_CITREE_SP: 
+				traceProperty = RTSMConst.loglevel_tree_state_persistency; 			
+				_src = "SP";
+				break;
+			case RTSMLog.LOG_DM_CITREE_BUILDER: 
+				traceProperty = RTSMConst.loglevel_impact_tree_builder; 	
+				_src = "BUILD";
+				break;
+			case RTSMLog.LOG_DM_CMDB_QUERY_REG: 
+				traceProperty = RTSMConst.loglevel_cmdb_query_register; 	
+				_src = "QREG";
+				break; 
+			case RTSMLog.LOG_DM_IMPACT_CALC: 
+				traceProperty = RTSMConst.loglevel_impact_calculation; 	
+				_src = "CALC";
+				break;
+			case RTSMLog.LOG_DM_PROC_QUEUE_MGR: 
+				traceProperty = RTSMConst.loglevel_process_queue_manager; 	
+				_src = "PQM";
+				break;
+			default:
+				traceProperty = RTSMConst.loglevel_default; 	
+				if (gs.nil(caller))
+					_src = "";
+				else
+					_src = caller;		
+		}
+
+		if (gs.nil(this._msgPrefix)) {
+			this._msgPrefix = "";
+			this._srcSufix = "" ;			
+		} else {
+			this._srcSufix = '-' + this._msgPrefix;
+			this._msgPrefix = "[" + this._msgPrefix + "]";
+		}
+		// it seems to be clearly
+		this._msgPrefix = "";
+
+		this.log = new global.GSLog(null, 'RTSM-' + _src + this._srcSufix);
+
+		this.loglev = new RTSMUtil().getProperty(traceProperty, 'error');
+		if (!gs.nil(this.loglev))
+			this.log.setLevel(this.loglev);
+
+	},
+	
+	/**SNDOC
+	 @name debug
+     @description Do something on RTSM
+	 @author Andreas Reermann
+     @param  {String} [msg] - log string
+	 @example log.debug('Information'); 
+     */	
+	 debug: function(msg) {
+		this.log.log('debug', this._msgPrefix + msg);	
+    },
+
+	/**SNDOC
+	 @name trace
+     @description Do something on RTSM
+	 @author Andreas Reermann
+     @param  {String} [msg] - log string
+	 @example log.debug('Information'); 
+     */	
+	trace: function(msg) {
+		this.log.log('trace', '[TRACE] ' + msg);	
+    },
+
+	/**SNDOC
+	 @name info
+     @description Do something on RTSM
+	 @author Andreas Reermann
+     @param  {String} [msg] - log string
+	 @example log.info('Information'); 
+     */	
+	info: function(msg){
+		this.log.log('info', this._msgPrefix + msg);
+    },
+	
+	/**SNDOC
+	 @name warn
+     @description Do something on RTSM
+	 @author Andreas Reermann
+     @param  {String} [msg] - log string
+	 @example log.warn('Information'); 
+     */	
+	warn: function(msg){
+        this.log.log('warning', this._msgPrefix + msg);
+    },
+
+	/**SNDOC
+	 @name error
+     @description Do something on RTSM
+	 @author Andreas Reermann
+     @param  {String} [msg] - log string
+	 @example log.error('error'); 
+     */	
+	error: function(msg){
+        this.log.log('err', this._msgPrefix + msg);
+    },
+	
+	/*
+	* Logs all the properties (recursively) in the given object: name, type, and value.  The optional second parameter is a name for the logged object.
+	*/
+	logObject: function(obj, name) {
+		// gs.info("[RTSM][logObject]: Start");
+		// gs.info("[RTSM][logObject]: " + name + ": " + JSON.stringify(obj));
+		try {
+			// if (this.loglev == 'debug')
+			// 	this.debug((global.JSUtil.describeObject(obj, name)));
+			// else if (this.loglev == 'info')
+			// 	this.info((global.JSUtil.describeObject(obj, name)));
+			if (this.loglev == 'trace')
+				this.trace((this.describeObject(obj, name)));
+			else if (this.loglev == 'debug')
+				this.debug((this.describeObject(obj, name)));
+			else if (this.loglev == 'info')
+				this.info((this.describeObject(obj, name)));
+		} catch (err) {
+			gs.info("[RTSM][logObject] Error: name " + name + ": " + JSON.stringify(obj));
+		}
+		// gs.info("[RTSM][logObject]: End");
+	},
+
+	/*
+	adopetd from JSUtil
+	*/
+
+	/*
+	* Returns the type of the given value as a string, as follows:
+	*   'null'     if the given value is null or undefined
+	*   'string'   if the given value is a primitive string or a String wrapper instance
+	*   'number'   if the given value is a primitive number or a Number wrapper instance
+	*   'boolean'  if the given value is a primitive boolean or a Boolean wrapper instance
+	*   'function' if the given value is a function
+	*   'object'   otherwise (including if it is a Java object)
+	* 
+	* See also: typeOf() which returns these or for Objects implented with 'type:' (such as 
+	*           Script Includes that use our default boilerplate), this returns that type
+	*           which is intended to be the Javascript 'className' of the object.  
+	*/
+	type_of: function(value) {
+		if (value == null)
+			return 'null';
+		
+		// if (JSUtil.isJavaObject(value))
+		// 	return 'object';
+			
+		var t = typeof value;
+		if ((t == 'string') || (t == 'number') || (t == 'boolean') || (t == 'function'))
+			return t;
+			
+		// if ((value instanceof String) || ('' + value.constructor).match(/^function String\(\)/))
+		if ((value instanceof String))
+			return 'string';
+			
+		if (value instanceof Number)
+			return 'number';
+			
+		if (value instanceof Boolean)
+			return 'boolean';
+			
+		return 'object';
+	},
+	
+	/*
+	* Returns a string that recursively describes all the properties in the given object: name, type, and value.  
+	* The optional second parameter is a name for the logged object.
+	*/
+	describeObject: function(obj, name) {
+		var result = [];
+		result.push('Log Object' + ((name) ? ': ' + name : ''));
+		if ((typeof(obj) != 'object' && typeof(obj) != 'string') || obj == null)
+			result.push('  null, undefined, or not an object: ' + typeof(obj) );
+		else
+			this._describeObject(obj, null, '  ', 0, result);
+		return result.join('\n');
+	},
+
+	/*
+	* Internal recursive object description string builder.
+	*/
+	_describeObject: function(obj, name, lead, level, result) {
+		if (level > 25) {
+			result.push(lead + '<<< exceeded 25 recursion levels, ignoring any deeper levels >>>');
+			return;
+		}
+		
+		var ns = (name == null) ? '' : name + ': ';
+		var value = obj;
+
+		// var type = global.JSUtil.type_of(value);
+		var type = this.type_of(value);
+		if (type == 'function') {
+			// result.push(lead + ns + type);
+			return;
+		}
+		else if (type != 'object') {
+			result.push(lead + ns + type + ' = ' + value);
+			return;
+		}		
+
+		if (value instanceof Array) {
+			result.push(lead + ns + 'Array of ' + value.length + ' elements');
+			for (var i = 0; i < value.length; i++)
+				this._describeObject(value[i], '[' + i + ']', lead + '  ', level + 1, result);
+		}
+		else {
+			// if (global.JSUtil.isJavaObject(obj)) {
+			// 	var klassName = GlideJSUtil.getJavaClassName(obj);
+			// 	result.push(lead + ns + 'Java Object: ' + klassName + ' = ' + obj);
+			// }
+			// else 
+			if (obj instanceof GlideRecord) {
+				var rec = (!gs.nil(obj.getDisplayValue())) ? '@ ' + obj.getDisplayValue() : '';
+				result.push(lead + ns + 'GlideRecord(\'' + obj.getTableName() + '\') ' + rec);
+				var grMap = {};					
+				this.grUtil.populateFromGR(grMap, obj);				
+				for (var fld_name in grMap) {
+					var fld = grMap[fld_name];
+					result.push(lead + ns + fld_name + ' = ' + fld);
+				}					
+			}
+			else {
+				if (typeof obj.explainLock == 'function') {  // is this a GlideElement of some kind?
+					var nm = obj.getName();
+					var vl = obj.getDisplayValue();
+					result.push(lead + ns + 'GlideElement (or child class): ' + nm + ' = ' + vl);
+				} else {
+					// if (obj.hasOwnProperty("__type")) {
+					if ( typeof obj.__type !== 'undefined')  {
+						result.push(lead + ns + obj.__type);				
+					} else {
+						result.push(lead + ns + 'Object');
+					}
+					for (var nmo in obj) {
+						if (nmo != 'log' && nmo != 'ops' && nmo != 'qState' && nmo != 'importUser' && nmo != 'importCompany' && nmo != 'importUserCompany' ) {
+							this._describeObject(obj[nmo], nmo, '  ' + lead, level + 1, result);
+						}
+					}
+				}
+			}
+		}
+	},
+
+    type: 'RTSMLog'
+
+});
+
+// Helpers
+RTSMLog.logQuery = function(aGR){
+	return (' # ' + aGR.getRowCount() +  ' /[' + aGR.getTableName() + ']/ ' + aGR.getEncodedQuery());
+};
+
+// RTSM Types & Domains
+RTSMLog.LOG_DEFAULT = "";
+
+RTSMLog.LOG_DM_CITREE= "Impact Tree";
+RTSMLog.LOG_DM_CITREE_SP = "CI Tree State Persistency";
+RTSMLog.LOG_DM_CITREE_BUILDER = "Impact Tree Builder";
+RTSMLog.LOG_DM_CMDB_QUERY_REG = "CMDB Query Register";
+RTSMLog.LOG_DM_IMPACT_CALC = "Impact Calculation";
+RTSMLog.LOG_DM_UTILITIES = "Utilities";
+RTSMLog.LOG_DM_PROC_QUEUE_MGR = "Processing Queue Manager";
+
+RTSMLog.LOG_TYPE_SJ = "SJ";
+RTSMLog.LOG_TYPE_SA = "SA";
+RTSMLog.LOG_TYPE_SI = "SI";
+RTSMLog.LOG_TYPE_BR = "BR";
+
+/*
+
+https://developer.servicenow.com/dev.do#!/reference/api/orlando/server/no-namespace/c_GlideSystemScopedAPI#r_SGSYS-getEscapedMessage_S_O?navFilter=gs
+
+info(String message, Object parm1, Object parm2, Object parm3, Object parm4, Object parm5)
+	Writes an info message to the system log.
+	gs.info("This is an info message from {0}.{1}", myFirstName, myLastName);
+
+debug(String message, Object parm1, Object parm2, Object parm3, Object parm4, Object parm5)
+	Writes a debug message to the system log.
+
+error(String message, Object parm1, Object parm2, Object parm3, Object parm4, Object parm5)
+	Writes an error message to the system log.
+	This method accepts up to five variable arguments (varargs) in the message using the Java MessageFormat placeholder replacement pattern.
+	Note: Variables must contain valid values for this method to provide correct output.
+
+warn(String message, Object parm1, Object parm2, Object parm3, Object parm4, Object parm5)
+	Writes a warning message to the system log.
+
+
+*/
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-11-03 12:26:42</sys_created_on>
+        <sys_id>6bccc3f4db146010689c22d40596193f</sys_id>
+        <sys_mod_count>89</sys_mod_count>
+        <sys_name>RTSMLog</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_6bccc3f4db146010689c22d40596193f</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-22 13:24:42</sys_updated_on>
+    </sys_script_include>
+</record_update>

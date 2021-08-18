@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.CILoopDetector</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>/**
+ *   Product: Service Event Management
+ *   Application: ServiceEvent
+ *   Component: CILoopDetector
+ *   Functions: checkCIRelationForLoop, createCILoopDetectedEvent
+ *   Tables Accessed: N/A
+ *   Which objects call this Script Include: N/A
+ *   Purpose: Script to dectet CMDB Model loops
+ *   Ref: ASN-3449
+ *   Change logs: 09/13/2018 - Initial Version
+ *   Limitations: N/A
+ *   Required dependencies with version: GSLog, RCA_CreateServiceEvent
+ */</description>
+        <name>CILoopDetector</name>
+        <script><![CDATA[/**SNDOC
+	@name CILoopDetector
+	@description Script to detect CI Relations loops
+	@domain Impact Tree Builder
+	@author Thomas Grensemann
+	@version 1.0.0
+	*/
+var CILoopDetector = Class.create();
+CILoopDetector.prototype = {
+
+	initialize: function () {
+
+		/**
+		 * Object hash to store CIs
+		 * 
+		 * @type {Object}
+		 * @private
+		 */
+		this._ciLoopDetection = {};
+
+		this.log = new RTSMLog(RTSMLog.LOG_DM_CITREE_BUILDER, "CILoopDetector");
+	},
+
+	/**SNDOC
+		@name checkCIRelationForLoop
+		@description Checks if the parent or child of a CI Relation are included in the _ciLoopDetection object hash.
+		@author ATF2
+		@param  {Object} [ciRelation] - CI Relation traversed, that should be checked for a CI Loop
+		@returns {String} null for 'No CI Loop detected' or sys_id of the CI if lopp is detected 
+		*/
+	checkCIRelationForLoop: function (ciRelation) {
+		var parentSysId;
+		var parentCIName;
+		var childSysId;
+		var childCIName;
+
+		parentSysId = ciRelation.parent.sys_id;
+		childSysId = ciRelation.child.sys_id;
+		
+		parentCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', parentSysId, 'name');
+		childCIName = RTSMUtil.findBy('cmdb_ci', 'sys_id', childSysId, 'name');
+
+		var result = this._createObject(parentSysId, 'parent', parentCIName, true, childSysId, childCIName);
+
+		this.log.info('[checkCIRelationForLoop] parentSysId=' + parentSysId + ' childSysId=' + childSysId);
+
+		var parent = this._ciLoopDetection[parentSysId];
+
+		if (!parent) {
+			parent = this._createObject(parentSysId, 'parent', parentCIName, false);
+			parent[childSysId] = this._createObject(childSysId, 'child', childCIName, false);
+
+			this._ciLoopDetection[parentSysId] = parent;
+
+			result.loop = false;
+		} else {
+			var child = this._ciLoopDetection[parentSysId][childSysId];
+
+			if (!child) {
+				parent[childSysId] = this._createObject(childSysId, 'child', childCIName, false);
+				result.loop = false;
+			}
+		}
+
+		return result;
+	},
+
+	/**SNDOC
+		@name createCILoopDetectedAlert
+		@description Creates an CI loop detected monitoring alert to notify support of the loop situation
+		@author ATF2
+		@param  {Object} [ci] - sys_id of the parent CI for which loop was deteced
+		@param  {Object} [childCI] - sys_id of the child CI for which loop was deteced
+		@param {string} [operation] - a text to describe the operation during which the CI Loop was detected (used for the Alert Message)
+		@param  {Object} [parent_alert=null] - An alert object that is currently processed. Optional.
+		@returns {String} 
+		*/
+	//TODO: Refactor the alert details to a config setting. They are hardcoded here but cannot be generally used because they are ATF specific.
+	createCILoopDetectedAlert: function (ci, childCI, operation, parent_alert) {
+		this.log.debug("Start createCILoopDetectedAlert: KID CI sys_id is - [" + ci.sys_id + "]");
+
+		var parentCIName;
+		var parentCIUniqueId;
+		var parentCompanyName;
+		var childCIName;
+		var childCIUniqueId;
+
+		var parentGR = new GlideRecord('cmdb_ci');
+		parentGR.get(ci.sys_id);
+		var childGR = new GlideRecord('cmdb_ci');
+		childGR.get(childCI.sys_id);
+
+		parentCIName = parentGR.name;
+		parentCIUniqueId = parentGR.number;
+		parentCompanyName = parentGR.company.getDisplayValue();
+
+		childCIName = childGR.name;
+		childCIUniqueId = childGR.number;
+
+		try {
+			var enableCILoop = new RTSMUtil().getProperty(RTSMConst.enableCILoopIncident);		
+
+			if (enableCILoop !== 'true') {
+				this.log.info("enableCILoopIncident property is disabled");
+				return;
+			}
+			if (enableCILoop === 'true') {
+				if (!ci.sys_id) {
+					this.log.error("createCILoopDetectedAlert: kid_sys_id is null");
+					return;
+				}
+				//new GlideImpersonate().impersonate(gs.getProperty("SEVMonitoring.user"));
+				var priorityNumeric,
+					priorityName,
+					type,
+					delay;
+
+				this.log.info("createCILoopDetectedAlert: Loop detected on the CI: [" + parentCIName + "]");
+
+				var alertClass = "CI Loop Parent [" + parentCIUniqueId + "] Child [" + childCIUniqueId + "]";
+				var LoopAlertDesc = "Alert Management module processed a request. A loop in the CMDB model containing the Parent CI [" + parentCIName + "], sys_id [" + ci.sys_id + "] ";
+				LoopAlertDesc += " to Child CI [" + childCIName + "], sys_id [" + childCI.sys_id + "] ";
+
+				LoopAlertDesc += " for Customer [" + parentCompanyName + "] was detected";
+				if (!parent_alert) {
+					LoopAlertDesc += ". ";
+				} else {
+					LoopAlertDesc += " while processing Alert [" + parent_alert.number + "]. ";
+					this.log.info("createCILoopDetectedAlert: Alert Number: [" + parent_alert.number + "], Alert Message Text: " + LoopAlertDesc);
+				}
+
+				LoopAlertDesc += operation + " was stopped. Please fix the CMDB model and delete the loop.";
+				//priority of incident also depends on used CI and Company (Allow P1 incidents - option)
+				priorityNumeric = 2;
+				priorityName = 'high';
+				type = 'ci.loop.availability';
+
+				var alertType = 'AVAILABILITY'; //'PERFORMANCE';
+				var alertSender = 'ATF-ServiceNow';
+				var source = 'ATF-ServiceNow';
+				var notifySub = 'NEVER';
+				var sendType = 'ATF-ServiceNow';
+				var severity = 'High';
+
+				var impact = priorityNumeric; //1 for error level, 2 for warning level
+				var urgency = priorityNumeric; //1 for error level, 2 for warning level
+
+				var sev_user = gs.getProperty("SEVMonitoring.user");
+				var orig_user = gs.getUserName();
+
+				var ciUniqueId;
+				var ciIdType;
+				var ciSysId;
+
+				// TODO Unknown Property, Refactor Function, see above
+				var ciName = gs.getProperty('rca.alert.LoopEvt.CIName');
+
+				var sevCI = ciName + "-" + parentCompanyName;
+				ciSysId = RTSMUtil.findBy('cmdb_ci', 'name', sevCI, 'sys_id');
+
+				var sev = new GlideImpersonate();
+				if (orig_user != sev_user) {
+					sev.impersonate(sev_user);
+				}
+
+				if (ciSysId) {
+					ciUniqueId = RTSMUtil.findBy('cmdb_ci', 'name', sevCI, 'number');
+					ciIdType = 'CIID';
+				} else {
+					ciUniqueId = RTSMUtil.findBy('cmdb_ci', 'name', ciName, 'number');
+					ciIdType = 'CIID';
+					ciSysId = RTSMUtil.findBy('cmdb_ci', 'name', ciName, 'sys_id');
+				}
+
+
+				if (orig_user != sev_user) {
+					sev.impersonate(orig_user);
+				}
+
+				var hostname = parentCIName;
+				var company = "";
+				var cti = gs.getProperty("rca.alert.SACMOper.CTI");
+
+				//"redo" = "force new ticket" - create new ticket immediately
+				//"delayed" -> create new ticket after 5 minutes
+				var ticketStatus = 'delayed';
+
+				// AR nowDateTime not in Scoped App				
+				// var gdt = new GlideDateTime(gs.nowDateTime());
+				var gdt = new GlideDateTime();
+				var epoch = gdt.getNumericValue();
+
+				var alertID = type + '.' + epoch;
+
+				//this.log.info("createCILoopDetectedAlert: Affected CI: [" + ciSysId + "], CI name = " + ciName + ", CI uniqueId = " +ciUniqueId);
+
+				var serviceAlertSysId = SEVCreateServiceAlert.createServiceAlert(LoopAlertDesc, company, cti, alertType, ticketStatus, alertClass, alertSender, source, notifySub, priorityName, sendType, alertID, severity, impact, urgency, ciUniqueId, ciIdType, ciSysId, hostname);
+
+				this.log.info("createCILoopDetectedAlert: Service Alert created: [" + serviceAlertSysId + "]");
+
+			}
+
+		} catch (err) {
+			gs.logError('SI: createCILoopDetectedAlert - Error detected, error message is ' + err.message, 'RCA');
+		}
+		this.log.debug("End createCILoopDetectedAlert: KID Alert sys_id is - [" + ci.sys_id + "]");
+	},
+
+
+	/**
+	 * Helper object for loop detecion
+	 * 
+	 * @param {string} sys_id of the CI parent for wich loop was deteced
+	 * @param (String) typ of the ci 
+	 */
+	/**SNDOC
+		@name _createObject
+		@private
+		@description Helper object for loop detecion
+		@author ATF2
+		@param  {String} [sysId] - sys_id of the CI parent for wich loop was deteced
+		@param  {String} [type] - type of
+		@param  {String} [name] - name of
+		@param  {String} [loop] - loop of 
+		@param  {String} [childSysId] - childSysId of 
+		@param  {String} [childName] - childName of 
+		@returns {Object} object with parameter names as keys and parameter values as values
+		*/
+	_createObject: function (sysId, type, name, loop, childSysId, childName) {
+		return {
+			sysId: sysId,
+			name: name,
+			type: type,
+			loop: loop,
+			childSysId: childSysId,
+			childName: childName
+		};
+	},
+
+
+	/**SNDOC
+		@name copyRelationsFrom
+		@description copy parent child relations from the loopDetector to this loop detector
+		@author ATF2
+		@param  {CILoopDetector} [loopDetector] - A loop detector object
+		@returns {String} 
+		*/
+	copyRelationsFrom: function (loopDetector) {
+		for (var parentSysID in loopDetector._ciLoopDetection) {
+			this._ciLoopDetection[parentSysID] = {};
+			for (var childSysID in loopDetector._ciLoopDetection[parentSysID]) {
+				this._ciLoopDetection[parentSysID][childSysID] = {};
+				for (var key in loopDetector._ciLoopDetection[parentSysID][childSysID]) {
+					this._ciLoopDetection[parentSysID][childSysID][key] = loopDetector._ciLoopDetection[parentSysID][childSysID][key];
+				}
+			}
+		}
+	},
+
+	/**
+	 * The function returns a copy of the object (itself).
+	 *
+	 * @return: a fresh copy of the CI Loop Detector object
+	 */
+	/**SNDOC
+		@name getCopy
+		@description The function returns a copy of the object (itself).
+		@author ATF2
+		@returns {CILoopDetector} a fresh copy of the CI Loop Detector object
+		*/
+	getCopy: function () {
+
+		var returnLoop = new CILoopDetector();
+		//Create a copy of the LoopDetector
+		returnLoop.copyRelationsFrom(this);
+		//Return the copied Object to RCAHelper - Waterfall 
+		return returnLoop;
+	}
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>0a8a4799db7def442c528e686896194f</sys_id>
+        <sys_mod_count>106</sys_mod_count>
+        <sys_name>CILoopDetector</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_0a8a4799db7def442c528e686896194f</sys_update_name>
+        <sys_updated_by>hoa.nguyen</sys_updated_by>
+        <sys_updated_on>2021-07-08 03:02:14</sys_updated_on>
+    </sys_script_include>
+</record_update>

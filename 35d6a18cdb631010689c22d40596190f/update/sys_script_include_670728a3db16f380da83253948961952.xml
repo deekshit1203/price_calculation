@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.Serializer</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This script include is used to Serialize and Deserialize the CI Tree SP Data.</description>
+        <name>Serializer</name>
+        <script><![CDATA[/**SNDOC
+	@name var Serializer 
+	@domain Processing Queue Manager
+	@description 
+	*/
+var Serializer = Class.create();
+Serializer.prototype = {
+	/**SNDOC
+		@name 
+		@description 
+		@param {*} [queueType] -  
+		@param {*} [dataType] -  
+		@param {*} [customerSysId] -  
+		*/
+	initialize: function (queueType, dataType, customerSysId) {
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "Serializer");
+		this.queueType = queueType;
+		this.dataType = dataType;
+		this.customer = customerSysId;
+
+		//First Queue data member variable
+		this.firstQueueData = '';
+		this.error = "";
+	},
+	/**SNDOC
+		@name deleteOldData
+		@description 
+		*/
+	deleteOldData: function () {
+
+
+		this.log.info('deleteOldData : Entered the function ' + this.queueType + ' ' + this.dataType + ' ' + this.customer);
+		new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer).deleteAllData();
+		this.log.info('deleteOldData : Deleted all data ');
+		return true;
+	},
+	/**SNDOC
+		@name getError
+		@description 
+		*/
+	getError: function () {
+
+		return this.error;
+	},
+	/**SNDOC
+		@name getFirstQueueData
+		@description 
+		*/
+	getFirstQueueData: function () {
+
+		return this.firstQueueData;
+	},
+
+	type: 'Serializer'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>670728a3db16f380da83253948961952</sys_id>
+        <sys_mod_count>14</sys_mod_count>
+        <sys_name>Serializer</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_670728a3db16f380da83253948961952</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2020-10-30 16:50:43</sys_updated_on>
+    </sys_script_include>
+</record_update>

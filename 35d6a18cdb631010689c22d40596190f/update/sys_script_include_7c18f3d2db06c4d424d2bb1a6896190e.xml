@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.SerializerCIRelation</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>This Script Include is responsible for the serialization and deserialization of the CIRelation class. It extends from the general Serializer class to gain common functionality.</description>
+        <name>SerializerCIRelation</name>
+        <script><![CDATA[/**SNDOC
+	@name SerializerCIRelation
+	@description 
+	@domain Processing Queue Manager
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var SerializerCIRelation = Class.create();
+SerializerCIRelation.prototype = Object.extendsObject(Serializer, {
+	/**SNDOC
+		@name 
+		@description 
+		@param {String} [queueType] -  
+		@param {String} [dataType] -  
+		@param {String} [customerSysId] -  
+		*/
+	initialize: function (queueType, dataType, customerSysId) {
+		Serializer.prototype.initialize.call(this, queueType, dataType, customerSysId);
+		this.log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "SerializerCIRelation");			
+	},
+	/**SNDOC
+		@name serialize
+		@description  Serializes the passed CI Relation to the Queue Data table
+		@param {CIRelationManager} [ciRelManToSerialize] - CIRelation to be serialized
+		@returns {Boolean} true -> Object was serialized successfully, false -> Error while serialization
+		*/
+	serialize: function (ciRelManToSerialize) {
+		this.log.debug("[serialize CI Relation] Start");
+		var queueData = new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer);
+
+		//Clean the passed Param1 object for serialization
+		ciRelManToSerialize.cleanForSerialization();
+		//Serialize Param1 object via JSON.stringify() to String
+		var serializedData = JSON.stringify(ciRelManToSerialize);
+
+		this.log.debug("[serialize] serializedData " + serializedData);
+
+		var insertSuccess = queueData.insertData(serializedData);
+		if (insertSuccess == null) {
+			//Serialization was NOT successful
+			return false;
+		}
+		//Serialization was successful
+		this.firstQueueData = queueData.getFirstInsertedData();
+
+		this.log.debug("[serialize CI Relation] End");
+		return true;
+	},
+	/**SNDOC
+		@name deserialize
+		@description  Deserializes the CI Relation from the passed sys_id from the Queue Data table and re-creates the according CIRelation object
+		@param {String} [ciRelationToDeserialize] - sys_id of queue data element to serialize
+		@returns {Object} !=null -> CIRelation filled with the deserialized data, ==null -> Error occured
+		*/
+	deserialize: function (ciRelationToDeserialize) {
+		this.log.info("[deserialize CI Relation] Start");
+		//Create temporary 'CIRelation' Object
+		var returnCIRelation = new CIRelation();
+		var queueData = new CITreeSPProcessingQueueData(this.queueType, this.dataType, this.customer);
+		var data;
+
+		data = queueData.getData(ciRelationToDeserialize);
+		if (data.data != null) {
+			this.log.info("[deserialize] queue data to deserialize");
+			returnCIRelation = JSON.parse(data.data, this._revive);
+			this.log.debug("[deserialize CI Relation] End");
+			return returnCIRelation; //Return deserialized object			
+		} else {
+			this.log.info("[deserialize] No entry in queue data to deserialize");
+			this.error = "No data of queue type " + this.queueType + ", data type " + this.dataType + ", customer " + this.customer + " was available on the Queue Data table.";
+			this.log.error(this.error);
+			this.log.debug("[deserialize] End");
+			return null;
+		}
+	},
+	/**SNDOC
+		@name _revive
+		@description  Function is called by the JavaScript runtime when a JSON (an object of type CIRelation) is parsed.
+		@param {Object} [key] - key read from JSON structure
+		@param {Object} [val] - value read from JSON structure
+		@returns {Object} object returned from this parsing step in the JSON parse logic
+		*/
+	_revive: function (key, val) {
+		if (typeof (val) === 'object' && val.__type === 'CIRelation') {
+			var ciRelation = new CIRelation();
+			ciRelation.initFromCIRelation(val);
+			return ciRelation;
+		} else {
+			return val;
+		}
+
+	},
+	/**SNDOC
+		@name getSerializedString
+		@description  Function used to convert JSON to string
+		@param {CIRelation} [ciRelObj] - CIRelation Object
+		@returns {String} Serilazed Data
+		*/
+
+	getSerializedString: function (ciRelObj) {
+
+		this.log.debug("[getSerializedString] Start");
+
+		var ciRelToSerialize = new CIRelation();
+
+		//Clean the passed Param1 object for serializationn	
+		ciRelToSerialize.cleanForSerialization();
+
+		//Serialize Param1 object via JSON.stringify() to String
+		var serializedData = JSON.stringify(ciRelObj);
+
+		this.log.info("[getSerializedString] Serialized String: " + serializedData);
+
+		this.log.debug("[getSerializedString] End");
+		return serializedData;
+	},
+
+
+	type: 'SerializerCIRelation'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>7c18f3d2db06c4d424d2bb1a6896190e</sys_id>
+        <sys_mod_count>41</sys_mod_count>
+        <sys_name>SerializerCIRelation</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_7c18f3d2db06c4d424d2bb1a6896190e</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-01-13 15:15:55</sys_updated_on>
+    </sys_script_include>
+</record_update>

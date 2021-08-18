@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_atpu_rtsm.AJAX</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description>The Script Include is a place to store RTSM client callable methods</description>
+        <name>AJAX</name>
+        <script><![CDATA[/**SNDOC
+	@name AJAX
+	@description
+	@domain Utilities
+	@author ATF2SEV
+	@version 1.0.0
+	*/
+var AJAX = Class.create();
+AJAX.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+
+	/**SNDOC
+		@name populateClasses
+		@description 
+		@returns {Json} customer names
+		*/
+	populateClasses: function () {
+		// var log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "AJAX");
+		// log.debug("[AJAX] START populateClasses")
+		IRRManager.resetIRR();
+		var irr = new IRRManager();
+		irr.populateClasses();
+		// log.debug("[AJAX] END populateClasses")			
+	},
+
+	/**SNDOC
+		@name recalcCurrentCustomer
+		@description trigger recalcutaion of customer via "RTSM customer" form
+		@returns {
+		*/
+		recalcCurrentCustomer: function () {
+			var log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "AJAX");
+			log.debug("[AJAX] START recalcCurrentCustomer: ");
+			
+			var rtsmCustID = this.getParameter('sysparm_sysid');
+			var cust = new GlideRecord('x_atpu_rtsm_customer_to_function');
+			cust.addQuery('sys_id', rtsmCustID);
+			cust.addQuery('active', true);
+			cust.query();
+
+			if (cust.next()) {
+				var custID = cust.getValue('customer');
+				new FunnelFiller().insert(RTSMConst.QO.recalcCustomer, custID);
+				this.log.debug("[AJAX] END recalcCurrentCustomer: custID: " + custID);
+
+			} else {
+				log.debug("[AJAX] END recalcCurrentCustomer: Customer not found or inactive");					
+			}
+		},
+	
+	/**SNDOC
+		@name reimportCurrentCustomer
+		@description trigger reimport of customer via "RTSM customer" form
+		@returns {
+		*/
+		reimportCurrentCustomer: function () {
+			var log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "AJAX");
+			log.debug("[AJAX] START reimportCurrentCustomer: ");
+			
+			var rtsmCustID = this.getParameter('sysparm_sysid');
+			var cust = new GlideRecord('x_atpu_rtsm_customer_to_function');
+			cust.addQuery('sys_id', rtsmCustID);
+			cust.addQuery('active', true);
+			cust.query();
+
+			if (cust.next()) {
+				var custID = cust.getValue('customer');
+				new FunnelFiller().insert(RTSMConst.QO.cmdbImportCustomers, custID);
+				this.log.debug("[AJAX] END reimportCurrentCustomer: custID: " + custID);
+
+			} else {
+				log.debug("[AJAX] END reimportCurrentCustomer: Customer not found or inactive");					
+			}
+		},
+	
+	/**SNDOC
+		@name getCITreeSPEnabledCustomers
+		@description Read enabled customers
+		@returns {Json} customer names
+		*/
+
+	getCITreeSPEnabledCustomers: function () {
+		var custNameArr = [];
+		var sp = new SPConfig();
+		custNameArr = sp.getCITreeSPEnabledCustomers();
+		return new JSON().encode(custNameArr);
+	},
+	/**SNDOC
+		@name ciTreeSPRecalcCustomers
+		@description Recalculate the CI Tree of the enabled customers
+		@returns {string} The number of valid customers
+		*/
+	ciTreeSPRecalcCustomers: function () {
+		var log = new RTSMLog(RTSMLog.LOG_TYPE_SI, "AJAX");
+
+		var j = 0;
+		var validSysIdArr = [];
+		var validCount = 0;
+		var strArr = this.getParameter('sysparm_custSysIdList');
+		var sysIdArr = JSON.parse(strArr);
+
+		log.info("ciTreeSPRecalcCustomers: start : " + sysIdArr);
+
+		//Remove duplicates from the customer list array.
+		var arrayUtil = new global.ArrayUtil();
+		sysIdArr = arrayUtil.unique(sysIdArr);
+
+		while (j < sysIdArr.length) {
+			log.info("ciTreeSPRecalcCustomers: " + sysIdArr[j]);
+			//Query core_company table to fetch the sysIds of the customers based on company name from UI.
+			var gr = new GlideRecord('core_company');
+			gr.addQuery('sys_id', sysIdArr[j]);
+			gr.query();
+
+			if (gr.next()) {
+				validSysIdArr.push(gr.sys_id);
+				validCount++;
+				log.info("ciTreeSPRecalcCustomers: Valid Count" + validCount);
+			}
+			j++;
+		}
+
+		//Pass the valid list of sysIds in an Array.
+		var recalcSP = new CITreeSP();
+		recalcSP.triggerRecalculateCustomers(validSysIdArr);
+		log.info("ciTreeSPRecalcCustomers: Valid sysIds array: " + validSysIdArr);
+
+		//Return the count of valid customers to UI page.
+		log.info("ciTreeSPRecalcCustomers: End : " + validCount);
+		return validCount.toString();
+
+	},
+
+	/* 
+	 * A103938
+	 * 21.10.2020
+	 * x_atpu_rtsm_sender not needed anymore
+	 */
+	// getAlertSenderFilterConditions : function(){
+
+	// 	//Getting the sysparm parameters here
+	// 	var senderName = this.getParameter('sysparm_alertsendername');
+	// 	var filterConditions = this.getParameter('sysparm_filterConditions');
+
+	// 	//Getting alert sender name here via GlideRecord
+	// 	var grAlertSender = new GlideRecord('x_atpu_rtsm_sender');
+	// 	grAlertSender.get(senderName);
+	// 	var alertSenderName = grAlertSender.name;
+
+	// 	if (alertSenderName && !filterConditions) {
+
+	// 		//set active=true and alertSenderName in the filter conditions
+	// 		var filterString = "x_atpu_rtsm_sender="+alertSenderName+"^active=true";
+
+	// 		return filterString;
+	// 	}
+	// },
+
+	type: 'AJAX'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+        <sys_created_on>2020-09-25 10:27:12</sys_created_on>
+        <sys_id>27e63fb2db3fef008471a7c7489619d6</sys_id>
+        <sys_mod_count>184</sys_mod_count>
+        <sys_name>AJAX</sys_name>
+        <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+        <sys_update_name>sys_script_include_27e63fb2db3fef008471a7c7489619d6</sys_update_name>
+        <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+        <sys_updated_on>2021-06-30 15:32:08</sys_updated_on>
+    </sys_script_include>
+</record_update>

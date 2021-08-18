@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_ui_form_sections form_id="a111cc891b8ab01051d64261cd4bcb24" sys_domain="global" table="x_atpu_rtsm_subgraph_log" version="3">
+        <sys_ui_form_section action="INSERT_OR_UPDATE">
+            <position>0</position>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-08-16 12:16:10</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>6111cc891b8ab01051d64261cd4bcb28</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_overrides/>
+            <sys_ui_form display_value="x_atpu_rtsm_subgraph_log" name="x_atpu_rtsm_subgraph_log" sys_domain="global" view="Default view">a111cc891b8ab01051d64261cd4bcb24</sys_ui_form>
+            <sys_ui_section caption="NULL" display_value="" name="x_atpu_rtsm_subgraph_log" sys_domain="global" view="Default view">4cf7c17ddbc9b450689c22d40596190d</sys_ui_section>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-08-16 12:16:10</sys_updated_on>
+        </sys_ui_form_section>
+        <sys_ui_form action="INSERT_OR_UPDATE">
+            <name>x_atpu_rtsm_subgraph_log</name>
+            <roles/>
+            <sys_class_name>sys_ui_form</sys_class_name>
+            <sys_created_by>andreas.reermann@atos.net</sys_created_by>
+            <sys_created_on>2021-08-16 12:16:09</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>a111cc891b8ab01051d64261cd4bcb24</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>x_atpu_rtsm_subgraph_log</sys_name>
+            <sys_overrides/>
+            <sys_package display_value="RTSM" source="x_atpu_rtsm">35d6a18cdb631010689c22d40596190f</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="RTSM">35d6a18cdb631010689c22d40596190f</sys_scope>
+            <sys_update_name>sys_ui_form_sections_a111cc891b8ab01051d64261cd4bcb24</sys_update_name>
+            <sys_updated_by>andreas.reermann@atos.net</sys_updated_by>
+            <sys_updated_on>2021-08-16 12:16:09</sys_updated_on>
+            <sys_user/>
+            <view display_value="Default view" name="NULL">Default view</view>
+            <view_name/>
+        </sys_ui_form>
+    </sys_ui_form_sections>
+</record_update>
